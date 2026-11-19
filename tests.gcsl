@@ -16,13 +16,20 @@ let REFERENCE = awslc_reference_path()
 
 let PREFIX = awslc_symbol_prefix()
 
-# The shell commands that make the wrappers stand in for AWS-LC's own
-# shared libraries, by their names, for programs built against them, and
-# fail unless `program` would load the wrappers.
+# Where a test has the testing libraries.
+let TESTING = "/opt/pcrypto-testing"
+
+# Internals AWS-LC exports for its tests, which only the testing libraries
+# export: an ML-KEM primitive, GCM's, and one of libssl's C++ internals.
+let INTERNALS = "ml_kem_768_keypair CRYPTO_gcm128_encrypt _ZN4bssl11{PREFIX}9SSLBuffer5ClearEv"
+
+# The shell commands that make the testing libraries stand in for AWS-LC's
+# own shared libraries, by their names, for programs built against them,
+# and fail unless `program` would load them.
 fn as_awslc(program: String) -> String {
-    = "mkdir -p /tmp/lib; ln -s {PCRYPTO}/lib/libpcrypto.so.1 /tmp/lib/libcrypto-awslc.so.1; \
-       ln -s {PCRYPTO}/lib/libpssl.so.1 /tmp/lib/libssl-awslc.so.1; \
-       export LD_LIBRARY_PATH=/tmp/lib:{PCRYPTO}/lib:{REFERENCE}/tests; \
+    = "mkdir -p /tmp/lib; ln -s {TESTING}/lib/libpcrypto.so.1 /tmp/lib/libcrypto-awslc.so.1; \
+       ln -s {TESTING}/lib/libpssl.so.1 /tmp/lib/libssl-awslc.so.1; \
+       export LD_LIBRARY_PATH=/tmp/lib:{TESTING}/lib:{REFERENCE}/tests; \
        LD_TRACE_LOADED_OBJECTS=1 {program} > /tmp/loaded || true; \
        grep -q 'libcrypto-awslc.so.1 => /tmp/lib/' /tmp/loaded \
        || {{ echo '{program} would not load the wrappers:'; cat /tmp/loaded; exit 1; }}"
@@ -32,13 +39,28 @@ fn as_awslc(program: String) -> String {
 # CET's IBT and SHSTK properties, and export every symbol in their public
 # versions, PCRYPTO_1 and PSSL_1, by a name that isn't prefixed. The one
 # exception is the prefixed names libpssl calls, which libpcrypto exports
-# in PEIOS_AWSLC_PRIVATE.
+# in PEIOS_AWSLC_PRIVATE. AWS-LC's internals are exported only by the
+# testing libraries, in PEIOS_AWSLC_TESTING.
 def test pcrypto_exports(
     pcrypto: Dir = build pcrypto(),
+    testing: Dir = build pcrypto_testing(),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
 ) {
     let ran = checked(
+        "exports() {{ \"$READELF\" --dyn-syms -W \"$1\" \
+         | awk '$1 ~ /^[0-9]+:$/ && $7 != \"UND\" && $7 != \"ABS\" {{ print $8 }}'; }}; \
+         for name in {INTERNALS}; do \
+         if {{ exports {PCRYPTO}/lib/libpcrypto.so.1; exports {PCRYPTO}/lib/libpssl.so.1; }} \
+         | grep -q \"^$name@\"; then echo \"the installed libraries export $name\"; exit 1; fi; \
+         {{ exports {TESTING}/lib/libpcrypto.so.1; exports {TESTING}/lib/libpssl.so.1; }} \
+         | grep -qx \"$name@@PEIOS_AWSLC_TESTING\" \
+         || {{ echo \"the testing libraries don't export $name\"; exit 1; }}; done",
+        [{at = PCRYPTO; place = pcrypto}, {at = TESTING; place = testing}],
+        c = c,
+        env = env,
+    )
+    let shipped = checked(
         "cd {PCRYPTO}/lib; for lib in libpcrypto libpssl; do \
          \"$READELF\" -d $lib.so.1 | grep -q \"(SONAME).*\\[$lib.so.1\\]\" \
          || {{ echo \"$lib: soname is not $lib.so.1\"; exit 1; }}; \
@@ -63,11 +85,12 @@ def test pcrypto_exports(
     )
 }
 
-# AWS-LC's own `crypto_test` passes against libpcrypto. One test, of a
-# connected IPv6 datagram socket, is left out: the sandbox has no IPv6, and
-# the test, unlike its neighbours, doesn't skip itself without it.
+# AWS-LC's own `crypto_test` passes against the testing libpcrypto, which
+# exports the internals it calls. One test, of a connected IPv6 datagram
+# socket, is left out: the sandbox has no IPv6, and the test, unlike its
+# neighbours, doesn't skip itself without it.
 def test awslc_crypto_test(
-    pcrypto: Dir = build pcrypto(),
+    testing: Dir = build pcrypto_testing(),
     reference: Dir = build awslc_reference(),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
@@ -75,31 +98,33 @@ def test awslc_crypto_test(
     let ran = checked(
         "{as_awslc("{REFERENCE}/tests/crypto_test")}; cd /tmp; {REFERENCE}/tests/crypto_test \
          --gtest_filter=-AddrFamily/BIODgramTest.SocketDatagramSetConnected/1",
-        [{at = PCRYPTO; place = pcrypto}, {at = "{REFERENCE}/tests"; place = reference.dir("tests")}],
+        [{at = TESTING; place = testing}, {at = "{REFERENCE}/tests"; place = reference.dir("tests")}],
         c = c,
         env = env,
     )
 }
 
-# AWS-LC's own `ssl_test` passes against libpssl and libpcrypto.
+# AWS-LC's own `ssl_test` passes against the testing libpssl and
+# libpcrypto.
 def test awslc_ssl_test(
-    pcrypto: Dir = build pcrypto(),
+    testing: Dir = build pcrypto_testing(),
     reference: Dir = build awslc_reference(),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
 ) {
     let ran = checked(
         "{as_awslc("{REFERENCE}/tests/ssl_test")}; cd /tmp; {REFERENCE}/tests/ssl_test",
-        [{at = PCRYPTO; place = pcrypto}, {at = "{REFERENCE}/tests"; place = reference.dir("tests")}],
+        [{at = TESTING; place = testing}, {at = "{REFERENCE}/tests"; place = reference.dir("tests")}],
         c = c,
         env = env,
     )
 }
 
 # AWS-LC's `bssl` tool, built against the wrappers' headers, runs against
-# them: it hashes, and generates and signs with a key.
+# the testing libraries, as it calls internals too: it hashes, and
+# generates and signs with a key.
 def test bssl_runs(
-    pcrypto: Dir = build pcrypto(),
+    testing: Dir = build pcrypto_testing(),
     reference: Dir = build awslc_reference(),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
@@ -111,7 +136,7 @@ def test bssl_runs(
          || {{ echo 'bssl sha256sum gave the wrong digest'; exit 1; }}; \
          {bssl} genrsa -bits 2048 > key.pem; {bssl} sign -key key.pem -digest sha256 < abc > signature; \
          [ -s signature ] || {{ echo 'bssl sign gave no signature'; exit 1; }}",
-        [{at = PCRYPTO; place = pcrypto}, {at = "{REFERENCE}/bin"; place = reference.dir("bin")}],
+        [{at = TESTING; place = testing}, {at = "{REFERENCE}/bin"; place = reference.dir("bin")}],
         c = c,
         env = env,
     )

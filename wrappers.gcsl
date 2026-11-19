@@ -1,10 +1,10 @@
 # libpcrypto and libpssl, the OpenSSL-compatible libraries Peios provides:
 # AWS-LC's prefixed archives, linked with forwarders that export each of
-# their functions by its OpenSSL name, and AWS-LC's headers with its
+# their public functions by its OpenSSL name, and AWS-LC's headers with its
 # pkg-config names, `libcrypto`, `libssl` and `openssl`. The forwarders and
 # version scripts are generated from the archives' own symbol tables by
-# `generate-forwarders.sh`, so every function AWS-LC exports is forwarded,
-# and the build fails on any symbol it can't classify.
+# `generate-forwarders.sh`, so every function AWS-LC's API has is
+# forwarded, and the build fails on any symbol it can't classify.
 #
 # `libcrypto.so` and `libssl.so` link to the wrappers, so that a build
 # that links `-lcrypto -lssl` without asking pkg-config links them, and so
@@ -21,6 +21,8 @@ import toolchain
 import Toolchain from toolchain
 
 let PCRYPTO = "/opt/pcrypto"
+
+let WRAPPERS = "/opt/wrappers"
 
 let REFERENCE = awslc_reference_path()
 
@@ -39,31 +41,58 @@ let LINK = "-shared -nostartfiles -Wl,-z,relro,-z,now,-z,noexecstack,-z,cet-repo
 # provides.
 let OPENSSL_API = "1.1.1"
 
+# The tree Peios installs.
 def build pcrypto() {
+    = build wrappers().dir("dist")
+}
+
+# The testing libraries: the same libraries, exporting too the internals
+# AWS-LC exports for its own tests to call, which its tests and `bssl` are
+# run against. They are never installed.
+def build pcrypto_testing() {
+    = build wrappers().dir("testing")
+}
+
+# The installed tree in `dist`, and the testing libraries in `testing/lib`,
+# linked from the same objects. The identifiers AWS-LC's public headers
+# declare, which say which of its exports are public, are those the headers
+# give C and C++ programs, preprocessed, and those in the macros the headers
+# define for programs to expand.
+def build wrappers() {
     = installed(
         build awslc(),
-        "mkdir -p gen {PCRYPTO}/lib/pkgconfig {PCRYPTO}/include {PCRYPTO}/share/rust; \
+        "D={WRAPPERS}/dist; T={WRAPPERS}/testing; \
+         mkdir -p gen $D/lib/pkgconfig $D/include $D/share/rust $T/lib; \
+         find {REFERENCE}/include/openssl -name '*.h' \
+         | grep -v -E '/(arm_arch|asm_base|boringssl_prefix_symbols|boringssl_prefix_symbols_asm)\\.h$' \
+         | sed 's|^{REFERENCE}/include/||' | sort | sed 's|.*|#include <&>|' > gen/public.c; \
+         $CC -E -dD -I{REFERENCE}/include gen/public.c > gen/public.i; \
+         $CXX -E -dD -x c++ -I{REFERENCE}/include gen/public.c > gen/public.ii; \
+         cat gen/public.i gen/public.ii | grep -v '^# [0-9]' | grep -o -E '[A-Za-z_][A-Za-z0-9_]*' \
+         | sort -u > gen/public.txt; \
          \"$READELF\" -sW lib/libcrypto.a > gen/crypto.syms; \
          \"$READELF\" -sW lib/libssl.a > gen/ssl.syms; \
-         sh {GENERATOR} {awslc_symbol_prefix()} gen/crypto.syms gen/ssl.syms gen; \
+         sh {GENERATOR} {awslc_symbol_prefix()} gen/public.txt gen/crypto.syms gen/ssl.syms gen; \
          $CC -c gen/crypto-forwarders.S -o gen/crypto-forwarders.o; \
          $CC -c gen/ssl-forwarders.S -o gen/ssl-forwarders.o; \
          begin=$($CC -print-file-name=crtbeginS.o); end=$($CC -print-file-name=crtendS.o); \
-         $CC {LINK} -Wl,-soname,libpcrypto.so.1 -o {PCRYPTO}/lib/libpcrypto.so.1 \"$begin\" \
+         for variant in dist testing; do \
+         if [ $variant = dist ]; then maps=; out=$D/lib; else maps=-testing; out=$T/lib; fi; \
+         $CC {LINK} -Wl,-soname,libpcrypto.so.1 -o $out/libpcrypto.so.1 \"$begin\" \
          gen/crypto-forwarders.o -Wl,--whole-archive lib/libcrypto.a -Wl,--no-whole-archive \
-         -Wl,--version-script=gen/crypto.map -lpthread \"$end\"; \
-         ln -s libpcrypto.so.1 {PCRYPTO}/lib/libpcrypto.so; \
-         $CXX {LINK} -Wl,-soname,libpssl.so.1 -o {PCRYPTO}/lib/libpssl.so.1 \"$begin\" \
+         -Wl,--version-script=gen/crypto$maps.map -lpthread \"$end\"; \
+         $CXX {LINK} -Wl,-soname,libpssl.so.1 -o $out/libpssl.so.1 \"$begin\" \
          gen/ssl-forwarders.o -Wl,--whole-archive lib/libssl.a -Wl,--no-whole-archive \
-         -Wl,--version-script=gen/ssl.map -L{PCRYPTO}/lib -lpcrypto -lpthread \"$end\"; \
-         ln -s libpssl.so.1 {PCRYPTO}/lib/libpssl.so; \
-         ln -s libpcrypto.so.1 {PCRYPTO}/lib/libcrypto.so; ln -s libpssl.so.1 {PCRYPTO}/lib/libssl.so; \
-         cp -R {REFERENCE}/include/openssl {PCRYPTO}/include/; \
-         cp {BINDINGS} {PCRYPTO}/share/rust/aws_lc_bindings.rs; \
+         -Wl,--version-script=gen/ssl$maps.map -L$out -l:libpcrypto.so.1 -lpthread \"$end\"; \
+         done; \
+         ln -s libpcrypto.so.1 $D/lib/libpcrypto.so; ln -s libpssl.so.1 $D/lib/libpssl.so; \
+         ln -s libpcrypto.so.1 $D/lib/libcrypto.so; ln -s libpssl.so.1 $D/lib/libssl.so; \
+         cp -R {REFERENCE}/include/openssl $D/include/; \
+         cp {BINDINGS} $D/share/rust/aws_lc_bindings.rs; \
          {pc("libcrypto", "The Peios OpenSSL-compatible cryptography library", "", "-lpcrypto")}; \
          {pc("libssl", "The Peios OpenSSL-compatible TLS library", "Requires.private: libcrypto", "-lpssl")}; \
          {pc("openssl", "The Peios OpenSSL-compatible libraries", "Requires: libssl libcrypto", "")}",
-        PCRYPTO,
+        WRAPPERS,
         given = [
             {at = REFERENCE; place = build awslc_reference()},
             {at = GENERATOR; place = file("generate-forwarders.sh")},
@@ -73,13 +102,13 @@ def build pcrypto() {
 }
 
 # The shell command that writes the pkg-config file `name`.pc, one line for
-# each of printf's arguments.
+# each of printf's arguments, into the installed tree at `$D`.
 fn pc(name: String, description: String, requires: String, libs: String) -> String {
     let requires_line = if requires == "" { "" } else { "'{requires}'" }
     let libs_line = if libs == "" { "" } else { "'Libs: -L${{libdir}} {libs}'" }
     = "printf '%s\\n' 'prefix=/usr' 'libdir=${{prefix}}/lib' 'includedir=${{prefix}}/include' '' \
        'Name: {name}' 'Description: {description}' 'Version: {OPENSSL_API}' \
-       {requires_line} {libs_line} 'Cflags: -I${{includedir}}' > {PCRYPTO}/lib/pkgconfig/{name}.pc"
+       {requires_line} {libs_line} 'Cflags: -I${{includedir}}' > $D/lib/pkgconfig/{name}.pc"
 }
 
 def pcrypto_path() -> String {
