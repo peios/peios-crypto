@@ -12,8 +12,10 @@
 #include <openssl/cipher.h>
 #include <openssl/digest.h>
 #include <openssl/err.h>
+#include <openssl/nid.h>
 
 #include "peios_policy.h"
+#include "policy_ids.h"
 
 static const struct peios_policy default_policy = {
     .reject_below = PEIOS_GRADE_U,
@@ -93,6 +95,21 @@ int peios_policy_aead(const EVP_AEAD *aead, enum peios_operation op) {
 
 int peios_policy_algorithm(const struct peios_algorithm *algorithm) {
     return decide(algorithm);
+}
+
+int peios_policy_pkcs12_pbe(int nid) {
+    switch (nid) {
+        case -1:
+            return 1;
+        case NID_pbe_WithSHA1And40BitRC2_CBC:
+            return decide(PEIOS_ENTRY_pkcs12_pbe_sha1_rc2_40_encrypt);
+        case NID_pbe_WithSHA1And128BitRC4:
+            return decide(PEIOS_ENTRY_pkcs12_pbe_sha1_rc4_128_encrypt);
+        case NID_pbe_WithSHA1And3_Key_TripleDES_CBC:
+            return decide(PEIOS_ENTRY_pkcs12_pbe_sha1_3des_encrypt);
+        default:
+            return decide(NULL);
+    }
 }
 
 void peios_policy_abort(const char *function) {

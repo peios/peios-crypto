@@ -27,6 +27,7 @@ enum peios_operation {
     PEIOS_OP_HMAC,
     PEIOS_OP_CMAC,
     PEIOS_OP_MAC,
+    PEIOS_OP_KDF,
     PEIOS_OP_ENCRYPT,
     PEIOS_OP_DECRYPT,
     PEIOS_OP_KEYGEN,
@@ -103,6 +104,11 @@ int peios_policy_cipher_init(const struct evp_cipher_ctx_st *ctx,
 /* The check for a function whose name fixes its algorithm: a hook passes
    the entry, which the generator finds by its id. */
 int peios_policy_algorithm(const struct peios_algorithm *algorithm);
+
+/* The check for encrypting with a PKCS #12 password-based scheme, by its
+   NID, as `PKCS12_create` and `PKCS8_encrypt` take it; -1 encrypts
+   nothing, and is allowed. */
+int peios_policy_pkcs12_pbe(int nid);
 
 /* Ends the process, for a refused call to `function`, which can't report
    failure: it returns nothing, or nothing its callers check, as with

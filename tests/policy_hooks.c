@@ -13,8 +13,14 @@
 #include <openssl/cipher.h>
 #include <openssl/cmac.h>
 #include <openssl/digest.h>
+#include <openssl/ec_key.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/hkdf.h>
 #include <openssl/hmac.h>
+#include <openssl/nid.h>
+#include <openssl/pkcs8.h>
+#include <openssl/x509.h>
 #include <openssl/md5.h>
 #include <openssl/poly1305.h>
 #include <openssl/rc4.h>
@@ -66,6 +72,26 @@ static int rsa_allowed(int bits) {
     BN_free(e);
     RSA_free(rsa);
     return ok;
+}
+
+// A P-256 key and a self-signed certificate for it, for PKCS #12.
+static X509 *self_signed(EVP_PKEY **key_out) {
+    EC_KEY *ec = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    EC_KEY_generate_key(ec);
+    EVP_PKEY *key = EVP_PKEY_new();
+    EVP_PKEY_assign_EC_KEY(key, ec);
+    X509 *cert = X509_new();
+    X509_set_version(cert, X509_VERSION_3);
+    ASN1_INTEGER_set(X509_get_serialNumber(cert), 1);
+    X509_gmtime_adj(X509_getm_notBefore(cert), 0);
+    X509_gmtime_adj(X509_getm_notAfter(cert), 3600);
+    X509_NAME_add_entry_by_txt(X509_get_subject_name(cert), "CN", MBSTRING_ASC,
+                               (const uint8_t *)"policy_hooks", -1, -1, 0);
+    X509_set_issuer_name(cert, X509_get_subject_name(cert));
+    X509_set_pubkey(cert, key);
+    X509_sign(cert, key, EVP_sha256());
+    *key_out = key;
+    return cert;
 }
 
 int main(void) {
@@ -156,6 +182,38 @@ int main(void) {
     check(AES_set_decrypt_key(key, 256, &aes) == 0, "AES_set_decrypt_key failed");
     RC4_KEY rc4;
     RC4_set_key(&rc4, 16, key);
+
+    // Key derivation.
+    check(PKCS5_PBKDF2_HMAC("pw", 2, key, 16, 1000, EVP_sha256(), 32, out),
+          "PBKDF2-HMAC-SHA-256 was refused");
+    check(HKDF(out, 32, EVP_sha256(), key, 32, NULL, 0, NULL, 0), "HKDF-SHA-256 was refused");
+    check(EVP_PBE_scrypt("pw", 2, key, 16, 1024, 8, 1, 0, out, 32), "scrypt was refused");
+    check(CRYPTO_tls1_prf(EVP_md5_sha1(), out, 32, key, 32, "label", 5, key, 16, NULL, 0),
+          "TLS 1.0's PRF was refused under the default policy");
+    check(CRYPTO_tls1_prf(EVP_sha256(), out, 32, key, 32, "label", 5, key, 16, NULL, 0),
+          "TLS 1.2's PRF was refused");
+
+    // Encrypted keys and PKCS #12: PKCS #12's RC2-40 is on the floor, and
+    // it's AWS-LC's default for PKCS12_create's certificates.
+    EVP_PKEY *pkey = NULL;
+    X509 *cert = self_signed(&pkey);
+    PKCS8_PRIV_KEY_INFO *p8 = EVP_PKEY2PKCS8(pkey);
+    check(PKCS8_encrypt(NID_pbe_WithSHA1And40BitRC2_CBC, NULL, "pw", 2, NULL, 0, 1000, p8) ==
+                  NULL &&
+              refused_with(REFUSED_BY_POLICY),
+          "PKCS #8 encryption with RC2-40 wasn't refused");
+    X509_SIG *sig = PKCS8_encrypt(-1, EVP_aes_256_cbc(), "pw", 2, NULL, 0, 1000, p8);
+    check(sig != NULL, "PKCS #8 encryption with PBES2 and AES-256 was refused");
+    X509_SIG_free(sig);
+    PKCS8_PRIV_KEY_INFO_free(p8);
+    check(PKCS12_create("pw", "name", pkey, cert, NULL, 0, 0, 0, 0, 0) == NULL &&
+              refused_with(REFUSED_BY_POLICY),
+          "PKCS12_create's default RC2-40 certificate encryption wasn't refused");
+    PKCS12 *p12 = PKCS12_create("pw", "name", pkey, cert, NULL, 0, -1, 0, 0, 0);
+    check(p12 != NULL, "PKCS12_create with unencrypted certificates was refused");
+    PKCS12_free(p12);
+    X509_free(cert);
+    EVP_PKEY_free(pkey);
 
     // Every digest and cipher AWS-LC looks up by NID is graded: none is
     // refused as ungraded.

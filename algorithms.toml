@@ -831,6 +831,93 @@ kind = "fixed"
 # but no MAC strength to speak of. Not NIST-approved.
 operations.mac = { grade = "D", fips = false }
 
+# --- Key derivation -------------------------------------------------------
+# A KDF's scheme is graded here; the digest it takes is checked too, as a
+# keyed hash (its `hmac` grade), so A here lets the digest decide.
+
+[[algorithm]]
+id = "pbkdf2"
+kind = "fixed"
+# SP 800-132, RFC 8018: approved, but not memory-hard, so cheap to attack
+# with GPUs beside scrypt or Argon2id.
+operations.kdf = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "scrypt"
+kind = "fixed"
+# RFC 7914: memory-hard. Not NIST-approved.
+operations.kdf = { grade = "A", fips = false }
+
+[[algorithm]]
+id = "hkdf"
+kind = "fixed"
+# RFC 5869, SP 800-56C.
+operations.kdf = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "tls12-prf"
+kind = "fixed"
+# TLS 1.2's PRF, RFC 5246; SP 800-135.
+operations.kdf = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "tls10-prf"
+kind = "fixed"
+# TLS 1.0's and 1.1's PRF over MD5 and SHA-1 together, which RFC 8996
+# deprecates with them. SP 800-135 still approves it.
+operations.kdf = { grade = "D", fips = true }
+
+[[algorithm]]
+id = "tls13-kdf"
+kind = "fixed"
+# TLS 1.3's HKDF-Expand-Label, RFC 8446.
+operations.kdf = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "sshkdf"
+kind = "fixed"
+# SSH's key derivation, RFC 4253; SP 800-135.
+operations.kdf = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "sskdf"
+kind = "fixed"
+# SP 800-56C's one-step KDF, with a digest or HMAC.
+operations.kdf = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "kbkdf"
+kind = "fixed"
+# SP 800-108's counter-mode KDF with HMAC.
+operations.kdf = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "evp-bytestokey"
+kind = "fixed"
+# OpenSSL's legacy password KDF: one pass of its digest by default, so a
+# guess costs almost nothing; no standard defines it.
+operations.kdf = { grade = "U", fips = false }
+
+# PKCS #12's own password-based encryption, RFC 7292 appendix C, keyed with
+# SHA-1. PBES2's schemes are graded by their cipher, and PBKDF2's entry.
+
+[[algorithm]]
+id = "pkcs12-pbe-sha1-rc2-40"
+kind = "fixed"
+# RC2 with a 40-bit key: export-grade, on the floor.
+operations.encrypt = { floor = true }
+
+[[algorithm]]
+id = "pkcs12-pbe-sha1-rc4-128"
+kind = "fixed"
+operations.encrypt = { grade = "U", fips = false }
+
+[[algorithm]]
+id = "pkcs12-pbe-sha1-3des"
+kind = "fixed"
+# Triple DES encryption, as its cipher is graded.
+operations.encrypt = { grade = "U", fips = false }
+
 # --- RSA key sizes -----------------------------------------------------
 # By SP 800-57 Part 1 Rev. 5, Table 2. FIPS 186-5 approves generating keys
 # of 2048 bits or more.

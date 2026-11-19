@@ -195,40 +195,26 @@ functions = [
 ]
 
 [[group]]
-title = "Key derivation and password-based keys"
+title = "Reading encrypted private keys and PKCS #12 files"
 class = "pending"
-reason = "Derives keys with a KDF or password-based scheme the caller chooses."
+reason = "Decrypts, or checks the MAC of, data whose algorithm the data names. Governing it needs the algorithm read from the data before AWS-LC decrypts it."
 functions = [
-    "CRYPTO_tls13_hkdf_expand_label",
-    "CRYPTO_tls1_prf",
-    "EVP_BytesToKey",
-    "EVP_PBE_scrypt",
+    "PKCS12_get_key_and_certs",
+    "PKCS12_parse",
+    "PKCS12_verify_mac",
+    "PKCS8_decrypt",
+    "PKCS8_parse_encrypted_private_key",
+]
+
+[[group]]
+title = "kdf.h: HKDF's parameters"
+class = "forward"
+reason = "Sets an HKDF key, salt, info or mode on an EVP_PKEY context. The digest, the one choice of algorithm, is checked when EVP_PKEY_CTX_set_hkdf_md sets it."
+functions = [
     "EVP_PKEY_CTX_add1_hkdf_info",
     "EVP_PKEY_CTX_hkdf_mode",
     "EVP_PKEY_CTX_set1_hkdf_key",
     "EVP_PKEY_CTX_set1_hkdf_salt",
-    "EVP_PKEY_CTX_set_hkdf_md",
-    "HKDF",
-    "HKDF_expand",
-    "HKDF_extract",
-    "KBKDF_ctr_hmac",
-    "PKCS12_PBE_add",
-    "PKCS12_create",
-    "PKCS12_free",
-    "PKCS12_get_key_and_certs",
-    "PKCS12_new",
-    "PKCS12_parse",
-    "PKCS12_set_mac",
-    "PKCS12_verify_mac",
-    "PKCS5_PBKDF2_HMAC",
-    "PKCS5_PBKDF2_HMAC_SHA1",
-    "PKCS8_decrypt",
-    "PKCS8_encrypt",
-    "PKCS8_marshal_encrypted_private_key",
-    "PKCS8_parse_encrypted_private_key",
-    "SSHKDF",
-    "SSKDF_digest",
-    "SSKDF_hmac",
 ]
 
 [[group]]
@@ -2462,6 +2448,9 @@ title = "pkcs8.h: building, encoding and inspecting objects"
 class = "forward"
 reason = "Builds, parses, encodes, prints or inspects objects. Their signing, verifying, digests and encryption are pending."
 functions = [
+    "PKCS12_PBE_add",
+    "PKCS12_free",
+    "PKCS12_new",
     "d2i_PKCS12",
     "d2i_PKCS12_bio",
     "d2i_PKCS12_fp",
@@ -4194,3 +4183,117 @@ function = "CRYPTO_chacha_20"
 signature = "void CRYPTO_chacha_20(uint8_t *out, const uint8_t *in, size_t in_len, const uint8_t key[32], const uint8_t nonce[12], uint32_t counter)"
 policy = "peios_policy_algorithm(@chacha20.encrypt)"
 failure = "abort"
+
+# Key derivation. A KDF's scheme is checked, and the digest it takes as a
+# keyed hash. PKCS12_create's defaults are AWS-LC's: Triple DES for the
+# key and RC2-40, on the floor, for the certificates, so a caller must
+# choose the certificates' scheme, or -1 to leave them unencrypted.
+# PKCS8_encrypt's PBES2 derives its key with PBKDF2-HMAC-SHA1.
+
+[[hook]]
+function = "PKCS5_PBKDF2_HMAC"
+signature = "int PKCS5_PBKDF2_HMAC(const char *password, size_t password_len, const uint8_t *salt, size_t salt_len, uint32_t iterations, const EVP_MD *digest, size_t key_len, uint8_t *out_key)"
+policy = "peios_policy_algorithm(@pbkdf2.kdf) && peios_policy_digest(digest, PEIOS_OP_HMAC)"
+failure = "0"
+
+[[hook]]
+function = "PKCS5_PBKDF2_HMAC_SHA1"
+signature = "int PKCS5_PBKDF2_HMAC_SHA1(const char *password, size_t password_len, const uint8_t *salt, size_t salt_len, uint32_t iterations, size_t key_len, uint8_t *out_key)"
+policy = "peios_policy_algorithm(@pbkdf2.kdf) && peios_policy_algorithm(@sha1.hmac)"
+failure = "0"
+
+[[hook]]
+function = "EVP_PBE_scrypt"
+signature = "int EVP_PBE_scrypt(const char *password, size_t password_len, const uint8_t *salt, size_t salt_len, uint64_t N, uint64_t r, uint64_t p, size_t max_mem, uint8_t *out_key, size_t key_len)"
+policy = "peios_policy_algorithm(@scrypt.kdf)"
+failure = "0"
+
+[[hook]]
+function = "HKDF"
+signature = "int HKDF(uint8_t *out_key, size_t out_len, const EVP_MD *digest, const uint8_t *secret, size_t secret_len, const uint8_t *salt, size_t salt_len, const uint8_t *info, size_t info_len)"
+policy = "peios_policy_algorithm(@hkdf.kdf) && peios_policy_digest(digest, PEIOS_OP_HMAC)"
+failure = "0"
+
+[[hook]]
+function = "HKDF_extract"
+signature = "int HKDF_extract(uint8_t *out_key, size_t *out_len, const EVP_MD *digest, const uint8_t *secret, size_t secret_len, const uint8_t *salt, size_t salt_len)"
+policy = "peios_policy_algorithm(@hkdf.kdf) && peios_policy_digest(digest, PEIOS_OP_HMAC)"
+failure = "0"
+
+[[hook]]
+function = "HKDF_expand"
+signature = "int HKDF_expand(uint8_t *out_key, size_t out_len, const EVP_MD *digest, const uint8_t *prk, size_t prk_len, const uint8_t *info, size_t info_len)"
+policy = "peios_policy_algorithm(@hkdf.kdf) && peios_policy_digest(digest, PEIOS_OP_HMAC)"
+failure = "0"
+
+[[hook]]
+function = "EVP_PKEY_CTX_set_hkdf_md"
+signature = "int EVP_PKEY_CTX_set_hkdf_md(EVP_PKEY_CTX *ctx, const EVP_MD *md)"
+policy = "peios_policy_algorithm(@hkdf.kdf) && peios_policy_digest(md, PEIOS_OP_HMAC)"
+failure = "0"
+
+[[hook]]
+function = "CRYPTO_tls1_prf"
+signature = "int CRYPTO_tls1_prf(const EVP_MD *digest, uint8_t *out, size_t out_len, const uint8_t *secret, size_t secret_len, const char *label, size_t label_len, const uint8_t *seed1, size_t seed1_len, const uint8_t *seed2, size_t seed2_len)"
+policy = "digest == EVP_md5_sha1() ? peios_policy_algorithm(@tls10-prf.kdf) : (peios_policy_algorithm(@tls12-prf.kdf) && peios_policy_digest(digest, PEIOS_OP_HMAC))"
+failure = "0"
+
+[[hook]]
+function = "CRYPTO_tls13_hkdf_expand_label"
+signature = "int CRYPTO_tls13_hkdf_expand_label(uint8_t *out, size_t out_len, const EVP_MD *digest, const uint8_t *secret, size_t secret_len, const uint8_t *label, size_t label_len, const uint8_t *hash, size_t hash_len)"
+policy = "peios_policy_algorithm(@tls13-kdf.kdf) && peios_policy_digest(digest, PEIOS_OP_HMAC)"
+failure = "0"
+
+[[hook]]
+function = "SSHKDF"
+signature = "int SSHKDF(const EVP_MD *evp_md, const uint8_t *key, size_t key_len, const uint8_t *xcghash, size_t xcghash_len, const uint8_t *session_id, size_t session_id_len, char type, uint8_t *out, size_t out_len)"
+policy = "peios_policy_algorithm(@sshkdf.kdf) && peios_policy_digest(evp_md, PEIOS_OP_HMAC)"
+failure = "0"
+
+[[hook]]
+function = "SSKDF_digest"
+signature = "int SSKDF_digest(uint8_t *out_key, size_t out_len, const EVP_MD *digest, const uint8_t *secret, size_t secret_len, const uint8_t *info, size_t info_len)"
+policy = "peios_policy_algorithm(@sskdf.kdf) && peios_policy_digest(digest, PEIOS_OP_HMAC)"
+failure = "0"
+
+[[hook]]
+function = "SSKDF_hmac"
+signature = "int SSKDF_hmac(uint8_t *out_key, size_t out_len, const EVP_MD *digest, const uint8_t *secret, size_t secret_len, const uint8_t *info, size_t info_len, const uint8_t *salt, size_t salt_len)"
+policy = "peios_policy_algorithm(@sskdf.kdf) && peios_policy_digest(digest, PEIOS_OP_HMAC)"
+failure = "0"
+
+[[hook]]
+function = "KBKDF_ctr_hmac"
+signature = "int KBKDF_ctr_hmac(uint8_t *out_key, size_t out_len, const EVP_MD *digest, const uint8_t *secret, size_t secret_len, const uint8_t *info, size_t info_len)"
+policy = "peios_policy_algorithm(@kbkdf.kdf) && peios_policy_digest(digest, PEIOS_OP_HMAC)"
+failure = "0"
+
+[[hook]]
+function = "EVP_BytesToKey"
+signature = "int EVP_BytesToKey(const EVP_CIPHER *type, const EVP_MD *md, const uint8_t *salt, const uint8_t *data, size_t data_len, unsigned count, uint8_t *key, uint8_t *iv)"
+policy = "peios_policy_algorithm(@evp-bytestokey.kdf)"
+failure = "0"
+
+[[hook]]
+function = "PKCS8_encrypt"
+signature = "X509_SIG *PKCS8_encrypt(int pbe_nid, const EVP_CIPHER *cipher, const char *pass, int pass_len, const uint8_t *salt, size_t salt_len, int iterations, PKCS8_PRIV_KEY_INFO *p8inf)"
+policy = "pbe_nid == -1 ? (peios_policy_cipher(cipher, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@pbkdf2.kdf) && peios_policy_algorithm(@sha1.hmac)) : peios_policy_pkcs12_pbe(pbe_nid)"
+failure = "NULL"
+
+[[hook]]
+function = "PKCS8_marshal_encrypted_private_key"
+signature = "int PKCS8_marshal_encrypted_private_key(CBB *out, int pbe_nid, const EVP_CIPHER *cipher, const char *pass, size_t pass_len, const uint8_t *salt, size_t salt_len, int iterations, const EVP_PKEY *pkey)"
+policy = "pbe_nid == -1 ? (peios_policy_cipher(cipher, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@pbkdf2.kdf) && peios_policy_algorithm(@sha1.hmac)) : peios_policy_pkcs12_pbe(pbe_nid)"
+failure = "0"
+
+[[hook]]
+function = "PKCS12_create"
+signature = "PKCS12 *PKCS12_create(const char *password, const char *name, const EVP_PKEY *pkey, X509 *cert, const struct stack_st_X509 *chain, int key_nid, int cert_nid, int iterations, int mac_iterations, int key_type)"
+policy = "peios_policy_pkcs12_pbe(key_nid == 0 ? NID_pbe_WithSHA1And3_Key_TripleDES_CBC : key_nid) && peios_policy_pkcs12_pbe(cert_nid == 0 ? NID_pbe_WithSHA1And40BitRC2_CBC : cert_nid) && peios_policy_algorithm(@sha1.hmac)"
+failure = "NULL"
+
+[[hook]]
+function = "PKCS12_set_mac"
+signature = "int PKCS12_set_mac(PKCS12 *p12, const char *password, int password_len, unsigned char *salt, int salt_len, int mac_iterations, const EVP_MD *md)"
+policy = "peios_policy_digest(md != NULL ? md : EVP_sha1(), PEIOS_OP_HMAC)"
+failure = "0"

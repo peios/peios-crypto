@@ -96,7 +96,7 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
          $CC -c gen/$lib-forwarders.S -o gen/$lib-forwarders.o; \
          $CC {OWN_CFLAGS} -I{REFERENCE}/include -I{RUNTIME} -c gen/$lib-hooks.c -o gen/$lib-hooks.o; \
          done; \
-         $CC {OWN_CFLAGS} -Iinclude -I{RUNTIME} -c {RUNTIME}/policy.c -o gen/policy.o; \
+         $CC {OWN_CFLAGS} -Iinclude -I{RUNTIME} -Igen -c {RUNTIME}/policy.c -o gen/policy.o; \
          $CC {OWN_CFLAGS} -I{RUNTIME} -c {RUNTIME}/decision.c -o gen/decision.o; \
          $CC {OWN_CFLAGS} -I{RUNTIME} -c gen/policy-table.c -o gen/policy-table.o; \
          begin=$($CC -print-file-name=crtbeginS.o); end=$($CC -print-file-name=crtendS.o); \
