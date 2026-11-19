@@ -1,12 +1,11 @@
-/* Peios crypto policy runtime: the interface between libpcrypto's
-   generated hooks and policy table, and the runtime that decides. Nothing
-   here is exported: the version scripts keep every peios_ name local. */
+/* Peios crypto policy runtime: the interface between the generated hooks
+   and policy table, and the runtime that decides. libpcrypto exports its
+   peios_policy_ functions only in the version PEIOS_POLICY_PRIVATE, for
+   libpssl's TLS checks; everything else here stays local. */
 #ifndef PEIOS_POLICY_H
 #define PEIOS_POLICY_H
 
 #include <stddef.h>
-
-#pragma GCC visibility push(hidden)
 
 struct env_md_st;
 struct evp_cipher_st;
@@ -56,6 +55,7 @@ enum peios_operation {
     PEIOS_OP_DERIVE,
     PEIOS_OP_ENCAPSULATE,
     PEIOS_OP_DECAPSULATE,
+    PEIOS_OP_NEGOTIATE,
 };
 
 /* Lowest first, so that grades compare as numbers. */
@@ -182,11 +182,37 @@ int peios_policy_hpke_kem(const struct evp_hpke_kem_st *kem, enum peios_operatio
    key or parameters policy refuses are freed, as AWS-LC frees them when it
    fails. A certificate chain AWS-LC accepts is refused if policy refuses
    any signature in it, or any key that checked one. */
+/* The check for the algorithm algorithms.toml names `name`, `tls12` say,
+   for `op`; and a refusal reported again, for a call on a connection
+   already refused. */
+int peios_policy_name(const char *name, enum peios_operation op);
+void peios_policy_refused(void);
+
+/* Each signature in a verified certificate chain, leaf first: each
+   certificate's, checked with its issuer's key. The last is the trust
+   anchor, whose own signature isn't checked. */
+int peios_policy_chain(const struct stack_st_X509 *chain);
+
 int peios_policy_keygen(struct evp_pkey_ctx_st *ctx, struct evp_pkey_st **out_pkey);
 int peios_policy_keygen_deterministic(struct evp_pkey_ctx_st *ctx, struct evp_pkey_st **out_pkey,
                                       const unsigned char *seed, size_t *seed_len);
 int peios_policy_paramgen(struct evp_pkey_ctx_st *ctx, struct evp_pkey_st **out_pkey);
 int peios_policy_verify_cert(struct x509_store_ctx_st *ctx);
+
+/* TLS, in libpssl: the calls that can run or finish a handshake, each of
+   which checks what the handshake negotiated once it's finished, and
+   fails the connection, with an insufficient_security alert, if policy
+   refuses any of it. A refused connection fails every later call too. */
+struct ssl_st;
+int peios_tls_do_handshake(struct ssl_st *ssl);
+int peios_tls_connect(struct ssl_st *ssl);
+int peios_tls_accept(struct ssl_st *ssl);
+int peios_tls_read(struct ssl_st *ssl, void *buf, int num);
+int peios_tls_read_ex(struct ssl_st *ssl, void *buf, size_t num, size_t *read_bytes);
+int peios_tls_peek(struct ssl_st *ssl, void *buf, int num);
+int peios_tls_peek_ex(struct ssl_st *ssl, void *buf, size_t num, size_t *read_bytes);
+int peios_tls_write(struct ssl_st *ssl, const void *buf, int num);
+int peios_tls_write_ex(struct ssl_st *ssl, const void *buf, size_t num, size_t *written);
 
 /* Ends the process, for a refused call to `function`, which can't report
    failure: it returns nothing, or nothing its callers check, as with
@@ -197,6 +223,5 @@ __attribute__((noreturn)) void peios_policy_abort(const char *function);
 #define PEIOS_R_REFUSED_BY_POLICY 1000
 #define PEIOS_R_UNGRADED_ALGORITHM 1001
 
-#pragma GCC visibility pop
 
 #endif

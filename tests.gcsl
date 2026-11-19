@@ -38,9 +38,10 @@ fn as_awslc(program: String) -> String {
 
 # The wrappers keep their sonames, need no AWS-LC library, carry Intel
 # CET's IBT and SHSTK properties, and export every symbol in their public
-# versions, PCRYPTO_1 and PSSL_1, by a name that isn't prefixed. The one
-# exception is the prefixed names libpssl calls, which libpcrypto exports
-# in PEIOS_AWSLC_PRIVATE. AWS-LC's internals are exported only by the
+# versions, PCRYPTO_1 and PSSL_1, by a name that isn't prefixed. The
+# exceptions are what libpssl calls of libpcrypto: AWS-LC's prefixed names,
+# in PEIOS_AWSLC_PRIVATE, and the policy runtime's checks, in
+# PEIOS_POLICY_PRIVATE. AWS-LC's internals are exported only by the
 # testing libraries, in PEIOS_AWSLC_TESTING.
 def test pcrypto_exports(
     pcrypto: Dir = build pcrypto(),
@@ -72,7 +73,7 @@ def test pcrypto_exports(
          exports() {{ \"$READELF\" --dyn-syms -W \"$1\" \
          | awk '$1 ~ /^[0-9]+:$/ && $7 != \"UND\" && $7 != \"ABS\" {{ print $8 }}'; }}; \
          bad=$(exports libpcrypto.so.1 | grep -v -e '^[^@]*@@PCRYPTO_1$' \
-         -e '^{PREFIX}_[^@]*@@PEIOS_AWSLC_PRIVATE$' || true); \
+         -e '^{PREFIX}_[^@]*@@PEIOS_AWSLC_PRIVATE$' -e '^peios_policy_[^@]*@@PEIOS_POLICY_PRIVATE$' || true); \
          bad=\"$bad$(exports libpcrypto.so.1 | grep '^{PREFIX}_.*@@PCRYPTO_1$' || true)\"; \
          bad=\"$bad$(exports libpssl.so.1 | grep -v '^[^@]*@@PSSL_1$' || true)\"; \
          bad=\"$bad$(exports libpssl.so.1 | grep '^{PREFIX}_' || true)\"; \
@@ -137,7 +138,9 @@ def test awslc_crypto_test(
 }
 
 # AWS-LC's own `ssl_test` passes against the testing libpssl and
-# libpcrypto.
+# libpcrypto. One test is left out: `SuiteTests/MultiTransferReadWriteTest.
+# SuiteTransfers/3`, which negotiates TLS_RSA_WITH_NULL_SHA, a suite that
+# encrypts nothing, on the floor.
 def test awslc_ssl_test(
     testing: Dir = build pcrypto_testing(),
     reference: Dir = build awslc_reference(),
@@ -145,7 +148,8 @@ def test awslc_ssl_test(
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
 ) {
     let ran = checked(
-        "{as_awslc("{REFERENCE}/tests/ssl_test")}; cd /tmp; {REFERENCE}/tests/ssl_test",
+        "{as_awslc("{REFERENCE}/tests/ssl_test")}; cd /tmp; {REFERENCE}/tests/ssl_test \
+         --gtest_filter=-SuiteTests/MultiTransferReadWriteTest.SuiteTransfers/3",
         [{at = TESTING; place = testing}, {at = "{REFERENCE}/tests"; place = reference.dir("tests")}],
         c = c,
         env = env,
@@ -245,6 +249,24 @@ def test policy_hooks(
         "cd /tmp; \"$CC\" -Wall -Werror -I{PCRYPTO}/include -o policy_hooks /work/policy_hooks.c \
          -L{PCRYPTO}/lib -lpcrypto; LD_LIBRARY_PATH={PCRYPTO}/lib ./policy_hooks",
         [{at = PCRYPTO; place = pcrypto}, {at = "/work/policy_hooks.c"; place = source}],
+        c = c,
+        env = env,
+    )
+}
+
+# libpssl's handshakes are checked once finished: one with a P-256
+# certificate completes and carries data, and one whose server has a
+# 512-bit RSA key fails with Peios's error and stays failed.
+def test tls_policy(
+    pcrypto: Dir = build pcrypto(),
+    source: File = file("tests/tls_policy.c"),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let ran = checked(
+        "cd /tmp; \"$CC\" -Wall -Werror -I{PCRYPTO}/include -o tls_policy /work/tls_policy.c \
+         -L{PCRYPTO}/lib -lpssl -lpcrypto; LD_LIBRARY_PATH={PCRYPTO}/lib ./tls_policy",
+        [{at = PCRYPTO; place = pcrypto}, {at = "/work/tls_policy.c"; place = source}],
         c = c,
         env = env,
     )

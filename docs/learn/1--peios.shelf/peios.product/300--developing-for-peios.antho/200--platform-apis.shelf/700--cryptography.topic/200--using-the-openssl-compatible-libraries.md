@@ -29,11 +29,18 @@ see [Using Cryptography from Rust](~peios/cryptography/using-cryptography-from-r
 - Expect Peios crypto policy to apply to these libraries' callers. The
   current libraries apply it when a program computes a digest or a MAC
   (HMAC, CMAC, Poly1305, or SipHash), starts or keys a cipher or an AEAD,
-  derives a key, encrypts a private key or PKCS #12 file, or generates or
-  uses a public key, other than in TLS. They enforce only the policy's
-  floor, which no machine can loosen: the null ciphers, the 40-bit
-  export-grade RC2 cipher, and RSA keys and Diffie-Hellman parameters
-  under 1024 bits. Other calls go straight to AWS-LC for now.
+  derives a key, encrypts a private key or PKCS #12 file, generates or
+  uses a public key, or finishes a TLS handshake. They enforce only the
+  policy's floor, which no machine can loosen: the null ciphers, the
+  40-bit export-grade RC2 cipher, and RSA keys and Diffie-Hellman
+  parameters under 1024 bits. A few calls still go straight to AWS-LC,
+  most of them ones that decrypt data whose algorithm the data itself
+  names, such as an encrypted PKCS #12 file.
+- Expect TLS to be checked once each handshake has finished: its version,
+  cipher suite, key-exchange group, keys, signatures, and the peer's
+  certificate chain. If policy refuses any of them, the connection fails
+  with an `insufficient_security` alert, as if the handshake itself had
+  failed, and every later call on it fails too.
 
 ## Build a C program
 

@@ -99,6 +99,7 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
          $CC {OWN_CFLAGS} -Iinclude -I{RUNTIME} -Igen -c {RUNTIME}/policy.c -o gen/policy.o; \
          $CC {OWN_CFLAGS} -I{RUNTIME} -c {RUNTIME}/decision.c -o gen/decision.o; \
          $CC {OWN_CFLAGS} -Iinclude -I{RUNTIME} -c gen/policy-table.c -o gen/policy-table.o; \
+         $CC {OWN_CFLAGS} -I{REFERENCE}/include -I{RUNTIME} -Igen -c {RUNTIME}/tls.c -o gen/tls.o; \
          begin=$($CC -print-file-name=crtbeginS.o); end=$($CC -print-file-name=crtendS.o); \
          for variant in dist testing; do \
          if [ $variant = dist ]; then maps=; out=$D/lib; else maps=-testing; out=$T/lib; fi; \
@@ -107,7 +108,7 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
          -Wl,--whole-archive lib/libcrypto.a -Wl,--no-whole-archive \
          -Wl,--version-script=gen/crypto$maps.map -lpthread \"$end\"; \
          $CXX {LINK} -Wl,-soname,libpssl.so.1 -o $out/libpssl.so.1 \"$begin\" \
-         gen/ssl-forwarders.o gen/ssl-hooks.o -Wl,--whole-archive lib/libssl.a -Wl,--no-whole-archive \
+         gen/ssl-forwarders.o gen/ssl-hooks.o gen/tls.o -Wl,--whole-archive lib/libssl.a -Wl,--no-whole-archive \
          -Wl,--version-script=gen/ssl$maps.map -L$out -l:libpcrypto.so.1 -lpthread \"$end\"; \
          done; \
          ln -s libpcrypto.so.1 $D/lib/libpcrypto.so; ln -s libpssl.so.1 $D/lib/libpssl.so; \

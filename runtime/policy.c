@@ -468,23 +468,35 @@ int peios_policy_paramgen(EVP_PKEY_CTX *ctx, EVP_PKEY **out_pkey) {
     return 0;
 }
 
-int peios_policy_verify_cert(X509_STORE_CTX *ctx) {
-    int ok = X509_verify_cert(ctx);
-    if (ok <= 0) {
-        return ok;
-    }
-    /* Each certificate's signature, checked with its issuer's key. The last
-       is the trust anchor, whose own signature AWS-LC doesn't check. */
-    STACK_OF(X509) *chain = X509_STORE_CTX_get0_chain(ctx);
+int peios_policy_name(const char *name, enum peios_operation op) {
+    return decide(by_name(name, op));
+}
+
+void peios_policy_refused(void) {
+    ERR_put_error(ERR_LIB_USER, 0, PEIOS_R_REFUSED_BY_POLICY, __FILE__, __LINE__);
+}
+
+int peios_policy_chain(const STACK_OF(X509) *chain) {
     size_t n = sk_X509_num(chain);
     for (size_t i = 0; i + 1 < n; i++) {
         X509 *cert = sk_X509_value(chain, i);
         EVP_PKEY *issuer_key = X509_get0_pubkey(sk_X509_value(chain, i + 1));
         if (!peios_policy_signature(X509_get_signature_nid(cert), issuer_key,
                                     PEIOS_OP_VERIFY)) {
-            X509_STORE_CTX_set_error(ctx, X509_V_ERR_APPLICATION_VERIFICATION);
             return 0;
         }
+    }
+    return 1;
+}
+
+int peios_policy_verify_cert(X509_STORE_CTX *ctx) {
+    int ok = X509_verify_cert(ctx);
+    if (ok <= 0) {
+        return ok;
+    }
+    if (!peios_policy_chain(X509_STORE_CTX_get0_chain(ctx))) {
+        X509_STORE_CTX_set_error(ctx, X509_V_ERR_APPLICATION_VERIFICATION);
+        return 0;
     }
     return 1;
 }

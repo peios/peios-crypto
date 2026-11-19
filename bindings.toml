@@ -27,6 +27,165 @@
 # pending: wrongly pending costs nothing, wrongly forwarded is a hole.
 
 [[group]]
+title = "TLS: configuration, keys and sessions"
+class = "forward"
+reason = "Chooses the versions, cipher suites, groups, signature algorithms or keys a TLS connection may use, resumes a session, or reads or exports what a handshake established. What a handshake negotiates is checked when it finishes, whatever chose it, by the calls that run a handshake; a connection policy refuses fails then, and every call after."
+functions = [
+    "DTLS_client_method",
+    "DTLS_method",
+    "DTLS_server_method",
+    "DTLS_with_buffers_method",
+    "DTLSv1_2_client_method",
+    "DTLSv1_2_method",
+    "DTLSv1_2_server_method",
+    "DTLSv1_client_method",
+    "DTLSv1_method",
+    "DTLSv1_server_method",
+    "PEM_read_SSL_SESSION",
+    "PEM_read_bio_SSL_SESSION",
+    "SSL_CTX_add_cert_compression_alg",
+    "SSL_CTX_add_session",
+    "SSL_CTX_build_cert_chain",
+    "SSL_CTX_check_private_key",
+    "SSL_CTX_enable_tls_channel_id",
+    "SSL_CTX_set1_curves",
+    "SSL_CTX_set1_curves_list",
+    "SSL_CTX_set1_ech_keys",
+    "SSL_CTX_set1_group_ids",
+    "SSL_CTX_set1_groups",
+    "SSL_CTX_set1_groups_list",
+    "SSL_CTX_set1_sigalgs",
+    "SSL_CTX_set1_sigalgs_list",
+    "SSL_CTX_set1_tls_channel_id",
+    "SSL_CTX_set_aes_hw_override_for_testing",
+    "SSL_CTX_set_chain_and_key",
+    "SSL_CTX_set_cipher_list",
+    "SSL_CTX_set_ciphersuites",
+    "SSL_CTX_set_dh_auto",
+    "SSL_CTX_set_handoff_mode",
+    "SSL_CTX_set_max_proto_version",
+    "SSL_CTX_set_min_proto_version",
+    "SSL_CTX_set_options",
+    "SSL_CTX_set_private_key_method",
+    "SSL_CTX_set_psk_client_callback",
+    "SSL_CTX_set_psk_server_callback",
+    "SSL_CTX_set_record_protocol_version",
+    "SSL_CTX_set_security_level",
+    "SSL_CTX_set_signing_algorithm_prefs",
+    "SSL_CTX_set_srtp_profiles",
+    "SSL_CTX_set_strict_cipher_list",
+    "SSL_CTX_set_ticket_aead_method",
+    "SSL_CTX_set_tls_channel_id_enabled",
+    "SSL_CTX_set_tlsext_ticket_key_cb",
+    "SSL_CTX_set_tlsext_ticket_keys",
+    "SSL_CTX_set_tlsext_use_srtp",
+    "SSL_CTX_set_tmp_dh",
+    "SSL_CTX_set_tmp_dh_callback",
+    "SSL_CTX_set_tmp_ecdh",
+    "SSL_CTX_set_tmp_rsa",
+    "SSL_CTX_set_tmp_rsa_callback",
+    "SSL_CTX_set_verify_algorithm_prefs",
+    "SSL_CTX_use_PrivateKey",
+    "SSL_CTX_use_PrivateKey_ASN1",
+    "SSL_CTX_use_PrivateKey_file",
+    "SSL_CTX_use_RSAPrivateKey",
+    "SSL_CTX_use_RSAPrivateKey_ASN1",
+    "SSL_CTX_use_RSAPrivateKey_file",
+    "SSL_CTX_use_cert_and_key",
+    "SSL_ECH_KEYS_add",
+    "SSL_SESSION_from_bytes",
+    "SSL_SESSION_get_master_key",
+    "SSL_apply_handback",
+    "SSL_apply_handoff",
+    "SSL_build_cert_chain",
+    "SSL_check_private_key",
+    "SSL_decline_handoff",
+    "SSL_enable_tls_channel_id",
+    "SSL_export_keying_material",
+    "SSL_from_bytes",
+    "SSL_generate_key_block",
+    "SSL_get_client_random",
+    "SSL_get_key_block_len",
+    "SSL_get_read_traffic_secret",
+    "SSL_get_server_random",
+    "SSL_get_traffic_secrets",
+    "SSL_get_write_traffic_secret",
+    "SSL_key_update",
+    "SSL_marshal_ech_config",
+    "SSL_process_quic_post_handshake",
+    "SSL_process_tls13_new_session_ticket",
+    "SSL_provide_quic_data",
+    "SSL_renegotiate",
+    "SSL_request_handshake_hints",
+    "SSL_serialize_capabilities",
+    "SSL_serialize_handback",
+    "SSL_serialize_handoff",
+    "SSL_serialize_handshake_hints",
+    "SSL_set1_curves",
+    "SSL_set1_curves_list",
+    "SSL_set1_delegated_credential",
+    "SSL_set1_group_ids",
+    "SSL_set1_groups",
+    "SSL_set1_groups_list",
+    "SSL_set1_sigalgs",
+    "SSL_set1_sigalgs_list",
+    "SSL_set1_tls_channel_id",
+    "SSL_set_aes_hw_override_for_testing",
+    "SSL_set_chain_and_key",
+    "SSL_set_cipher_list",
+    "SSL_set_ciphersuites",
+    "SSL_set_handoff_mode",
+    "SSL_set_handshake_hints",
+    "SSL_set_max_proto_version",
+    "SSL_set_min_proto_version",
+    "SSL_set_options",
+    "SSL_set_private_key_method",
+    "SSL_set_psk_client_callback",
+    "SSL_set_psk_server_callback",
+    "SSL_set_renegotiate_mode",
+    "SSL_set_security_level",
+    "SSL_set_session",
+    "SSL_set_signing_algorithm_prefs",
+    "SSL_set_srtp_profiles",
+    "SSL_set_strict_cipher_list",
+    "SSL_set_tls_channel_id_enabled",
+    "SSL_set_tlsext_use_srtp",
+    "SSL_set_tmp_dh",
+    "SSL_set_tmp_dh_callback",
+    "SSL_set_tmp_ecdh",
+    "SSL_set_tmp_rsa",
+    "SSL_set_tmp_rsa_callback",
+    "SSL_set_verify_algorithm_prefs",
+    "SSL_shutdown",
+    "SSL_to_bytes",
+    "SSL_use_PrivateKey",
+    "SSL_use_PrivateKey_ASN1",
+    "SSL_use_PrivateKey_file",
+    "SSL_use_RSAPrivateKey",
+    "SSL_use_RSAPrivateKey_ASN1",
+    "SSL_use_RSAPrivateKey_file",
+    "SSL_use_cert_and_key",
+    "SSLv23_client_method",
+    "SSLv23_method",
+    "SSLv23_server_method",
+    "TLS_client_method",
+    "TLS_method",
+    "TLS_server_method",
+    "TLS_with_buffers_method",
+    "TLSv1_1_client_method",
+    "TLSv1_1_method",
+    "TLSv1_1_server_method",
+    "TLSv1_2_client_method",
+    "TLSv1_2_method",
+    "TLSv1_2_server_method",
+    "TLSv1_client_method",
+    "TLSv1_method",
+    "TLSv1_server_method",
+    "d2i_SSL_SESSION",
+    "d2i_SSL_SESSION_bio",
+]
+
+[[group]]
 title = "PEM: unencrypted and already-encrypted data"
 class = "forward"
 reason = "Reads or writes PEM without encrypting: raw blocks, unencrypted PKCS #8 keys, or PKCS #8 keys already encrypted, whose encryption was checked when it was done."
@@ -235,181 +394,6 @@ functions = [
     "EVP_PKEY_CTX_hkdf_mode",
     "EVP_PKEY_CTX_set1_hkdf_key",
     "EVP_PKEY_CTX_set1_hkdf_salt",
-]
-
-[[group]]
-title = "TLS: keys and handshakes"
-class = "pending"
-reason = "Installs a key TLS signs or decrypts with, or runs a handshake that uses the negotiated algorithms."
-functions = [
-    "PEM_read_SSL_SESSION",
-    "PEM_read_bio_SSL_SESSION",
-    "SSL_CTX_add_session",
-    "SSL_CTX_build_cert_chain",
-    "SSL_CTX_check_private_key",
-    "SSL_CTX_set_aes_hw_override_for_testing",
-    "SSL_CTX_set_chain_and_key",
-    "SSL_CTX_set_handoff_mode",
-    "SSL_CTX_set_private_key_method",
-    "SSL_CTX_use_PrivateKey",
-    "SSL_CTX_use_PrivateKey_ASN1",
-    "SSL_CTX_use_PrivateKey_file",
-    "SSL_CTX_use_RSAPrivateKey",
-    "SSL_CTX_use_RSAPrivateKey_ASN1",
-    "SSL_CTX_use_RSAPrivateKey_file",
-    "SSL_CTX_use_cert_and_key",
-    "SSL_SESSION_from_bytes",
-    "SSL_SESSION_get_master_key",
-    "SSL_accept",
-    "SSL_apply_handback",
-    "SSL_apply_handoff",
-    "SSL_build_cert_chain",
-    "SSL_check_private_key",
-    "SSL_connect",
-    "SSL_decline_handoff",
-    "SSL_do_handshake",
-    "SSL_export_keying_material",
-    "SSL_from_bytes",
-    "SSL_generate_key_block",
-    "SSL_get_client_random",
-    "SSL_get_key_block_len",
-    "SSL_get_read_traffic_secret",
-    "SSL_get_server_random",
-    "SSL_get_traffic_secrets",
-    "SSL_get_write_traffic_secret",
-    "SSL_key_update",
-    "SSL_peek",
-    "SSL_peek_ex",
-    "SSL_process_quic_post_handshake",
-    "SSL_process_tls13_new_session_ticket",
-    "SSL_provide_quic_data",
-    "SSL_read",
-    "SSL_read_ex",
-    "SSL_renegotiate",
-    "SSL_request_handshake_hints",
-    "SSL_serialize_capabilities",
-    "SSL_serialize_handback",
-    "SSL_serialize_handoff",
-    "SSL_serialize_handshake_hints",
-    "SSL_set_aes_hw_override_for_testing",
-    "SSL_set_chain_and_key",
-    "SSL_set_handoff_mode",
-    "SSL_set_handshake_hints",
-    "SSL_set_private_key_method",
-    "SSL_set_session",
-    "SSL_shutdown",
-    "SSL_to_bytes",
-    "SSL_use_PrivateKey",
-    "SSL_use_PrivateKey_ASN1",
-    "SSL_use_PrivateKey_file",
-    "SSL_use_RSAPrivateKey",
-    "SSL_use_RSAPrivateKey_ASN1",
-    "SSL_use_RSAPrivateKey_file",
-    "SSL_use_cert_and_key",
-    "SSL_write",
-    "SSL_write_ex",
-    "d2i_SSL_SESSION",
-    "d2i_SSL_SESSION_bio",
-]
-
-[[group]]
-title = "TLS: versions, cipher suites, groups and signature algorithms"
-class = "pending"
-reason = "Chooses the protocol versions or algorithms TLS may negotiate."
-functions = [
-    "DTLS_client_method",
-    "DTLS_method",
-    "DTLS_server_method",
-    "DTLS_with_buffers_method",
-    "DTLSv1_2_client_method",
-    "DTLSv1_2_method",
-    "DTLSv1_2_server_method",
-    "DTLSv1_client_method",
-    "DTLSv1_method",
-    "DTLSv1_server_method",
-    "SSL_CTX_add_cert_compression_alg",
-    "SSL_CTX_enable_tls_channel_id",
-    "SSL_CTX_set1_curves",
-    "SSL_CTX_set1_curves_list",
-    "SSL_CTX_set1_ech_keys",
-    "SSL_CTX_set1_group_ids",
-    "SSL_CTX_set1_groups",
-    "SSL_CTX_set1_groups_list",
-    "SSL_CTX_set1_sigalgs",
-    "SSL_CTX_set1_sigalgs_list",
-    "SSL_CTX_set1_tls_channel_id",
-    "SSL_CTX_set_cipher_list",
-    "SSL_CTX_set_ciphersuites",
-    "SSL_CTX_set_dh_auto",
-    "SSL_CTX_set_max_proto_version",
-    "SSL_CTX_set_min_proto_version",
-    "SSL_CTX_set_options",
-    "SSL_CTX_set_psk_client_callback",
-    "SSL_CTX_set_psk_server_callback",
-    "SSL_CTX_set_record_protocol_version",
-    "SSL_CTX_set_security_level",
-    "SSL_CTX_set_signing_algorithm_prefs",
-    "SSL_CTX_set_srtp_profiles",
-    "SSL_CTX_set_strict_cipher_list",
-    "SSL_CTX_set_ticket_aead_method",
-    "SSL_CTX_set_tls_channel_id_enabled",
-    "SSL_CTX_set_tlsext_ticket_key_cb",
-    "SSL_CTX_set_tlsext_ticket_keys",
-    "SSL_CTX_set_tlsext_use_srtp",
-    "SSL_CTX_set_tmp_dh",
-    "SSL_CTX_set_tmp_dh_callback",
-    "SSL_CTX_set_tmp_ecdh",
-    "SSL_CTX_set_tmp_rsa",
-    "SSL_CTX_set_tmp_rsa_callback",
-    "SSL_CTX_set_verify_algorithm_prefs",
-    "SSL_ECH_KEYS_add",
-    "SSL_enable_tls_channel_id",
-    "SSL_marshal_ech_config",
-    "SSL_set1_curves",
-    "SSL_set1_curves_list",
-    "SSL_set1_delegated_credential",
-    "SSL_set1_group_ids",
-    "SSL_set1_groups",
-    "SSL_set1_groups_list",
-    "SSL_set1_sigalgs",
-    "SSL_set1_sigalgs_list",
-    "SSL_set1_tls_channel_id",
-    "SSL_set_cipher_list",
-    "SSL_set_ciphersuites",
-    "SSL_set_max_proto_version",
-    "SSL_set_min_proto_version",
-    "SSL_set_options",
-    "SSL_set_psk_client_callback",
-    "SSL_set_psk_server_callback",
-    "SSL_set_renegotiate_mode",
-    "SSL_set_security_level",
-    "SSL_set_signing_algorithm_prefs",
-    "SSL_set_srtp_profiles",
-    "SSL_set_strict_cipher_list",
-    "SSL_set_tls_channel_id_enabled",
-    "SSL_set_tlsext_use_srtp",
-    "SSL_set_tmp_dh",
-    "SSL_set_tmp_dh_callback",
-    "SSL_set_tmp_ecdh",
-    "SSL_set_tmp_rsa",
-    "SSL_set_tmp_rsa_callback",
-    "SSL_set_verify_algorithm_prefs",
-    "SSLv23_client_method",
-    "SSLv23_method",
-    "SSLv23_server_method",
-    "TLS_client_method",
-    "TLS_method",
-    "TLS_server_method",
-    "TLS_with_buffers_method",
-    "TLSv1_1_client_method",
-    "TLSv1_1_method",
-    "TLSv1_1_server_method",
-    "TLSv1_2_client_method",
-    "TLSv1_2_method",
-    "TLSv1_2_server_method",
-    "TLSv1_client_method",
-    "TLSv1_method",
-    "TLSv1_server_method",
 ]
 
 [[group]]
@@ -4895,3 +4879,51 @@ function = "i2d_PKCS8PrivateKey_nid_fp"
 signature = "int i2d_PKCS8PrivateKey_nid_fp(FILE *fp, const EVP_PKEY *x, int nid, const char *pass, int pass_len, pem_password_cb *cb, void *u)"
 policy = "peios_policy_pkcs12_pbe(nid)"
 failure = "0"
+
+# TLS. The calls that can run or finish a handshake check what it
+# negotiated, in runtime/tls.c.
+
+[[hook]]
+function = "SSL_do_handshake"
+signature = "int SSL_do_handshake(SSL *ssl)"
+wrap = "peios_tls_do_handshake"
+
+[[hook]]
+function = "SSL_connect"
+signature = "int SSL_connect(SSL *ssl)"
+wrap = "peios_tls_connect"
+
+[[hook]]
+function = "SSL_accept"
+signature = "int SSL_accept(SSL *ssl)"
+wrap = "peios_tls_accept"
+
+[[hook]]
+function = "SSL_read"
+signature = "int SSL_read(SSL *ssl, void *buf, int num)"
+wrap = "peios_tls_read"
+
+[[hook]]
+function = "SSL_read_ex"
+signature = "int SSL_read_ex(SSL *ssl, void *buf, size_t num, size_t *read_bytes)"
+wrap = "peios_tls_read_ex"
+
+[[hook]]
+function = "SSL_peek"
+signature = "int SSL_peek(SSL *ssl, void *buf, int num)"
+wrap = "peios_tls_peek"
+
+[[hook]]
+function = "SSL_peek_ex"
+signature = "int SSL_peek_ex(SSL *ssl, void *buf, size_t num, size_t *read_bytes)"
+wrap = "peios_tls_peek_ex"
+
+[[hook]]
+function = "SSL_write"
+signature = "int SSL_write(SSL *ssl, const void *buf, int num)"
+wrap = "peios_tls_write"
+
+[[hook]]
+function = "SSL_write_ex"
+signature = "int SSL_write_ex(SSL *s, const void *buf, size_t num, size_t *written)"
+wrap = "peios_tls_write_ex"

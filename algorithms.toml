@@ -1252,3 +1252,85 @@ id = "ctr-drbg"
 kind = "fixed"
 # SP 800-90A's CTR_DRBG with AES-256, run directly.
 operations.drbg = { grade = "A", fips = true }
+
+# --- TLS ------------------------------------------------------------------
+# What a handshake negotiates, beside its suite's cipher and MAC, its group
+# and its keys, which are graded above. A version that RFC 8996 deprecates
+# is U; the others are A, so that the suite, group and keys decide.
+
+[[algorithm]]
+id = "tls10"
+kind = "fixed"
+operations.negotiate = { grade = "U", fips = false }
+
+[[algorithm]]
+id = "tls11"
+kind = "fixed"
+operations.negotiate = { grade = "U", fips = false }
+
+[[algorithm]]
+id = "tls12"
+kind = "fixed"
+# SP 800-52 Rev. 2.
+operations.negotiate = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "tls13"
+kind = "fixed"
+operations.negotiate = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "dtls10"
+kind = "fixed"
+# DTLS 1.0 is TLS 1.1's datagram form, which RFC 8996 deprecates with it.
+operations.negotiate = { grade = "U", fips = false }
+
+[[algorithm]]
+id = "dtls12"
+kind = "fixed"
+operations.negotiate = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "tls-null-cipher"
+kind = "fixed"
+# A suite that encrypts nothing, TLS_RSA_WITH_NULL_SHA say: on the floor,
+# as NULL ciphers are.
+operations.negotiate = { floor = true }
+
+[[algorithm]]
+id = "tls-psk"
+kind = "fixed"
+# A pre-shared key alone, without (EC)DHE: no forward secrecy, and as
+# strong as the key. SP 800-52 Rev. 2 allows it.
+operations.negotiate = { grade = "B", fips = true }
+
+# DTLS-SRTP's media protection profiles, RFC 5764 and RFC 7714.
+
+[[algorithm]]
+id = "srtp-aes128-cm-sha1-80"
+kind = "fixed"
+# AES-128 counter mode with an 80-bit HMAC-SHA-1 tag: below 112 bits of
+# forgery resistance.
+operations.negotiate = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "srtp-aes128-cm-sha1-32"
+kind = "fixed"
+# A 32-bit tag.
+operations.negotiate = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "srtp-aead-aes-128-gcm"
+kind = "fixed"
+operations.negotiate = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "srtp-aead-aes-256-gcm"
+kind = "fixed"
+operations.negotiate = { grade = "A", fips = false }
+
+[[algorithm]]
+id = "srtp-null"
+kind = "fixed"
+# No encryption: on the floor, as NULL ciphers are.
+operations.negotiate = { floor = true }
