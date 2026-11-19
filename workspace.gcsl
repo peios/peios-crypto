@@ -1,9 +1,12 @@
 # The peios-crypto workspace: pekit builds it with the gcc library's Bootlin
-# C toolchain and the buildenv library's busybox and make, and gives AWS-LC's
-# build the go library's pinned Go, which its symbol prefixing runs.
+# C toolchain and the buildenv library's busybox and make, gives AWS-LC's
+# build the go library's pinned Go, which its symbol prefixing runs, and
+# builds bindgen, and the Rust program the wrappers are tested with, with
+# the rust library's pinned Rust.
 import Toolchain::* from "github.com/gcslib/buildenv"
 import Toolchain::* from "github.com/gcslib/gcc"
 import Toolchain::* from "github.com/gcslib/go"
+import Toolchain::* from "github.com/gcslib/rust"
 import Toolchain from toolchain
 
 pekitconf = {
@@ -11,5 +14,6 @@ pekitconf = {
         Toolchain::C gcc_x86_64,
         Toolchain::BuildEnv busybox_x86_64,
         Toolchain::Go go_1_26,
+        Toolchain::Rust rust_1_98,
     ]
 }

@@ -17,6 +17,24 @@
       "git": "https://github.com/gcslib/gcc",
       "dir": "",
       "rev": "HEAD"
+    },
+    {
+      "prefix": "github.com/gcslib/rust",
+      "git": "https://github.com/gcslib/rust",
+      "dir": "",
+      "rev": "HEAD"
+    },
+    {
+      "prefix": "github.com/gcslib/python",
+      "git": "https://github.com/gcslib/python",
+      "dir": "",
+      "rev": "HEAD"
+    },
+    {
+      "prefix": "github.com/gcslib/clang",
+      "git": "https://github.com/gcslib/clang",
+      "dir": "",
+      "rev": "HEAD"
     }
   ],
   "libraries": [
@@ -26,6 +44,13 @@
       "dir": "",
       "commit": "e194515d294871db9829a70fbc336ca9cf1972c3",
       "tree": "cc3338b6c040935a45ec23be20cd018a304f6662aadcdf15f37e704a9ac0f956"
+    },
+    {
+      "path": "github.com/gcslib/clang",
+      "git": "https://github.com/gcslib/clang",
+      "dir": "",
+      "commit": "4e0a0a349125c4daf347bdd7eabd1101ab9cae64",
+      "tree": "38e3d12d624e3d332ce63d4c07396be3a1eb4d8fab0c3cda8729d563f780af8f"
     },
     {
       "path": "github.com/gcslib/gcc",
@@ -40,6 +65,20 @@
       "dir": "",
       "commit": "43c9d5c32384753b682726ca026c324990a7630e",
       "tree": "e2d85e3ec9fba44588b5a0ffc910c8e5f281e410bf379099b4f00a3a41e0b805"
+    },
+    {
+      "path": "github.com/gcslib/python",
+      "git": "https://github.com/gcslib/python",
+      "dir": "",
+      "commit": "96702f5588b91a170d3cb46e52e29d02379a30a5",
+      "tree": "0b4e9c3d9667879294dac58a923d3a02037ec3529cfef1f8b0fb0eff48b914cc"
+    },
+    {
+      "path": "github.com/gcslib/rust",
+      "git": "https://github.com/gcslib/rust",
+      "dir": "",
+      "commit": "08732a35010b83be3bd4b97a932d13ec5b7b39cb",
+      "tree": "6a65b76477327b07374c88242b8a695eeb5016827cf3079003b2dcd282ee1d14"
     }
   ]
 }

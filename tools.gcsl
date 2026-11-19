@@ -1,8 +1,10 @@
-# What peios-crypto's build takes besides the C toolchain and Go, built from
-# its pinned release with the registered C toolchain and the buildenv
-# library's busybox and make, so that the build reads nothing of the
-# machine: CMake, which AWS-LC builds with. Kitware's SHA-256 for the
-# release archive was checked when it was pinned.
+# What peios-crypto's build takes besides the C toolchain and Go, each
+# built from its pinned release, so that the build reads nothing of the
+# machine: CMake, which AWS-LC builds with, by the registered C toolchain
+# and the buildenv library's busybox and make; and bindgen, which generates
+# the wrappers' Rust bindings, by the rust library's Rust. Kitware's SHA-256
+# for CMake's release archive was checked when it was pinned, and
+# crates.io's for bindgen's crate.
 #
 # Each tool is installed where it expects to be, under `/opt`; a build that
 # runs one places it there.
@@ -13,6 +15,7 @@ import Toolchain from toolchain
 import BuildEnv from "github.com/gcslib/buildenv"
 import base from "github.com/gcslib/buildenv"
 import bin_path from "github.com/gcslib/buildenv"
+import "github.com/gcslib/rust"
 
 # Where a build has the C toolchain and the source.
 let TOOL_CC = "/opt/cc"
@@ -42,6 +45,22 @@ def build cmake() {
          && make -j8 && make install",
         CMAKE,
     )
+}
+
+# bindgen 0.73.2's program, as `cargo install --locked bindgen-cli` builds
+# it, by the rust library's pinned Rust: AWS-LC's build runs it to generate
+# its Rust bindings. It loads libclang when it runs.
+def build bindgen() {
+    let src = unpack(
+        fetch(
+            "https://static.crates.io/crates/bindgen-cli/bindgen-cli-0.73.2.crate",
+            sha256 = "5622e043625b6d1f32c84f53699690a44d1419e657879de26eb252699f5ebb7c",
+            tool = true,
+        ),
+        strip = 1,
+    )
+    let vendor = rust.vendored(src.file("Cargo.lock")) with { making_tool = true }
+    = rust.cargo_build(src, vendor, bins = ["bindgen"], target = "x86_64-unknown-linux-gnu")
 }
 
 # What `script` installs at `out`, run in a copy of the source `src` given

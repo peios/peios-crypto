@@ -6,6 +6,7 @@ import Toolchain from toolchain
 import BuildEnv from "github.com/gcslib/buildenv"
 import base from "github.com/gcslib/buildenv"
 import bin_path from "github.com/gcslib/buildenv"
+import "github.com/gcslib/rust"
 
 let TOOL_CC = "/opt/cc"
 
@@ -117,8 +118,10 @@ def test bssl_runs(
 }
 
 # A program compiled against the wrappers' headers and linked with
-# `-lpssl -lpcrypto`, as an OpenSSL consumer is, runs, with a copy
-# relocation for the ASN.1 item table it uses.
+# `-lpssl -lpcrypto`, as the wrappers' pkg-config files say, runs, with a
+# copy relocation for the ASN.1 item table it uses; linked with `-lssl
+# -lcrypto`, as a build that doesn't ask pkg-config links OpenSSL, it loads
+# the wrappers and runs.
 def test consumer_builds(
     pcrypto: Dir = build pcrypto(),
     source: File = file("tests/consumer.c"),
@@ -130,8 +133,53 @@ def test consumer_builds(
          -o consumer /work/consumer.c -L{PCRYPTO}/lib -lpssl -lpcrypto; \
          \"$READELF\" -rW consumer | grep -q 'R_X86_64_COPY.*ASN1_OCTET_STRING_it' \
          || {{ echo 'consumer has no copy relocation for ASN1_OCTET_STRING_it'; exit 1; }}; \
-         LD_LIBRARY_PATH={PCRYPTO}/lib ./consumer",
+         LD_LIBRARY_PATH={PCRYPTO}/lib ./consumer; \
+         \"$CC\" -fPIE -pie -fcf-protection=full -I{PCRYPTO}/include \
+         -o consumer-openssl-names /work/consumer.c -L{PCRYPTO}/lib -lssl -lcrypto; \
+         for lib in libpssl.so.1 libpcrypto.so.1; do \
+         \"$READELF\" -d consumer-openssl-names | grep -q \"(NEEDED).*\\[$lib\\]\" \
+         || {{ echo \"linked with -lssl -lcrypto, the consumer does not load $lib\"; exit 1; }}; done; \
+         LD_LIBRARY_PATH={PCRYPTO}/lib ./consumer-openssl-names",
         [{at = PCRYPTO; place = pcrypto}, {at = "/work/consumer.c"; place = source}],
+        c = c,
+        env = env,
+    )
+}
+
+# The aws-lc-rs program in `tests/rust`, built with aws-lc-sys in system
+# mode, given the wrappers' tree as the system's AWS-LC: their headers,
+# their Rust bindings, and `libcrypto.so`, which aws-lc-sys looks for.
+def build system_awslc() {
+    let ws = rust.workspace(
+        dir("tests/rust"),
+        rust.vendored(file("tests/rust/Cargo.lock")),
+        crates = [
+            {
+                package = "aws-lc-sys"
+                env = [{key = "AWS_LC_SYS_SYSTEM_DIR"; value = PCRYPTO}]
+                given = [{at = PCRYPTO; place = build pcrypto()}]
+            },
+        ],
+    )
+    = rust.bin(ws, "system-awslc")
+}
+
+# The aws-lc-rs program runs against libpcrypto: it loads it by its soname
+# and carries no AWS-LC of its own, which aws-lc-sys would have built with
+# its own prefix.
+def test aws_lc_rs_system(
+    program: File = build system_awslc(),
+    pcrypto: Dir = build pcrypto(),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let ran = checked(
+        "\"$READELF\" -d /work/system-awslc | grep -q '(NEEDED).*\\[libpcrypto.so.1\\]' \
+         || {{ echo 'the program does not load libpcrypto.so.1'; exit 1; }}; \
+         if \"$NM\" /work/system-awslc 2>/dev/null | grep -q 'aws_lc_0_'; then \
+         echo 'the program carries its own AWS-LC'; exit 1; fi; \
+         LD_LIBRARY_PATH={PCRYPTO}/lib /work/system-awslc | grep -qx 'system-awslc: ok'",
+        [{at = PCRYPTO; place = pcrypto}, {at = "/work/system-awslc"; place = program}],
         c = c,
         env = env,
     )

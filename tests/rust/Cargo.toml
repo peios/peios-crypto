@@ -1,0 +1,11 @@
+[package]
+name = "system-awslc"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "An aws-lc-rs program linked against libpcrypto as a system AWS-LC"
+license = "MIT"
+
+[dependencies]
+aws-lc-rs = "=1.19.0"
+aws-lc-sys = "=0.47.0"

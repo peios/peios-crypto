@@ -6,6 +6,11 @@
 # `generate-forwarders.sh`, so every function AWS-LC exports is forwarded,
 # and the build fails on any symbol it can't classify.
 #
+# `libcrypto.so` and `libssl.so` link to the wrappers, so that a build
+# that links `-lcrypto -lssl` without asking pkg-config links them, and so
+# that aws-lc-sys, which looks for AWS-LC by those names, finds them. It
+# reads the Rust bindings at `share/rust/aws_lc_bindings.rs`.
+#
 # The tree is laid out to install under `/usr`, as its pkg-config files
 # say. Each library is linked without glibc's `crti.o` and `crtn.o`, whose
 # Bootlin builds lack the IBT and SHSTK properties: shared libraries need
@@ -17,11 +22,11 @@ import Toolchain from toolchain
 
 let PCRYPTO = "/opt/pcrypto"
 
-let ARCHIVES = "/work/archives"
-
 let REFERENCE = awslc_reference_path()
 
 let GENERATOR = "/work/generate-forwarders.sh"
+
+let BINDINGS = "/work/aws_lc_bindings.rs"
 
 # The link both libraries share. Each binds its own calls to its own
 # functions, so that a program can't take over AWS-LC's internal calls by
@@ -37,7 +42,7 @@ let OPENSSL_API = "1.1.1"
 def build pcrypto() {
     = installed(
         build awslc(),
-        "mkdir -p gen {PCRYPTO}/lib/pkgconfig {PCRYPTO}/include; \
+        "mkdir -p gen {PCRYPTO}/lib/pkgconfig {PCRYPTO}/include {PCRYPTO}/share/rust; \
          \"$READELF\" -sW lib/libcrypto.a > gen/crypto.syms; \
          \"$READELF\" -sW lib/libssl.a > gen/ssl.syms; \
          sh {GENERATOR} {awslc_symbol_prefix()} gen/crypto.syms gen/ssl.syms gen; \
@@ -52,7 +57,9 @@ def build pcrypto() {
          gen/ssl-forwarders.o -Wl,--whole-archive lib/libssl.a -Wl,--no-whole-archive \
          -Wl,--version-script=gen/ssl.map -L{PCRYPTO}/lib -lpcrypto -lpthread \"$end\"; \
          ln -s libpssl.so.1 {PCRYPTO}/lib/libpssl.so; \
+         ln -s libpcrypto.so.1 {PCRYPTO}/lib/libcrypto.so; ln -s libpssl.so.1 {PCRYPTO}/lib/libssl.so; \
          cp -R {REFERENCE}/include/openssl {PCRYPTO}/include/; \
+         cp {BINDINGS} {PCRYPTO}/share/rust/aws_lc_bindings.rs; \
          {pc("libcrypto", "The Peios OpenSSL-compatible cryptography library", "", "-lpcrypto")}; \
          {pc("libssl", "The Peios OpenSSL-compatible TLS library", "Requires.private: libcrypto", "-lpssl")}; \
          {pc("openssl", "The Peios OpenSSL-compatible libraries", "Requires: libssl libcrypto", "")}",
@@ -60,6 +67,7 @@ def build pcrypto() {
         given = [
             {at = REFERENCE; place = build awslc_reference()},
             {at = GENERATOR; place = file("generate-forwarders.sh")},
+            {at = BINDINGS; place = build awslc_rust_bindings()},
         ],
     )
 }
