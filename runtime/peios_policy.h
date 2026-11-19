@@ -159,6 +159,18 @@ int peios_policy_ec_group(const struct ec_group_st *group, enum peios_operation 
 int peios_policy_signature(int sig_nid, const struct evp_pkey_st *pkey,
                            enum peios_operation op);
 
+/* The same, for a signature an AlgorithmIdentifier names. */
+struct X509_algor_st;
+int peios_policy_algor(const struct X509_algor_st *algor, const struct evp_pkey_st *pkey,
+                       enum peios_operation op);
+
+/* Encrypting a content key to a recipient's public key, as PKCS #7 does:
+   with RSA, PKCS #1 v1.5 key transport. For one key, or every key in a
+   stack of certificates. */
+struct stack_st_X509;
+int peios_policy_key_transport(const struct evp_pkey_st *pkey);
+int peios_policy_key_transport_certs(const struct stack_st_X509 *certs);
+
 /* HPKE's KEM, KDF and AEAD, for a sender (`sender` nonzero) or a
    recipient. */
 int peios_policy_hpke(const struct evp_hpke_kem_st *kem, const struct evp_hpke_kdf_st *kdf,

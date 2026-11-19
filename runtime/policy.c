@@ -343,6 +343,38 @@ int peios_policy_signature(int sig_nid, const EVP_PKEY *pkey, enum peios_operati
     return peios_policy_pkey(pkey, op) && signature_digest(hash_nid);
 }
 
+int peios_policy_algor(const X509_ALGOR *algor, const EVP_PKEY *pkey, enum peios_operation op) {
+    if (algor == NULL) {
+        return 1;
+    }
+    const ASN1_OBJECT *obj;
+    X509_ALGOR_get0(&obj, NULL, NULL, algor);
+    return peios_policy_signature(OBJ_obj2nid(obj), pkey, op);
+}
+
+int peios_policy_key_transport(const EVP_PKEY *pkey) {
+    if (pkey == NULL) {
+        return 1;
+    }
+    if (!peios_policy_pkey(pkey, PEIOS_OP_ENCRYPT)) {
+        return 0;
+    }
+    int id = EVP_PKEY_id(pkey);
+    if (id == EVP_PKEY_RSA || id == EVP_PKEY_RSA_PSS) {
+        return peios_policy_rsa_padding(RSA_PKCS1_PADDING, PEIOS_OP_ENCRYPT);
+    }
+    return 1;
+}
+
+int peios_policy_key_transport_certs(const STACK_OF(X509) *certs) {
+    for (size_t i = 0; i < sk_X509_num(certs); i++) {
+        if (!peios_policy_key_transport(X509_get0_pubkey(sk_X509_value(certs, i)))) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int peios_policy_hpke(const EVP_HPKE_KEM *kem, const EVP_HPKE_KDF *kdf,
                       const EVP_HPKE_AEAD *aead, int sender) {
     if (kem == NULL || kdf == NULL || aead == NULL) {

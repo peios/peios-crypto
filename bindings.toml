@@ -27,6 +27,54 @@
 # pending: wrongly pending costs nothing, wrongly forwarded is a hole.
 
 [[group]]
+title = "Verifying signatures inside OCSP and PKCS #7"
+class = "pending"
+reason = "Verifies a signature, or a signer's certificate chain, inside AWS-LC, or runs PKCS #7's encoding or decoding with the algorithms its data names. Governing them needs the signature and chain read from what AWS-LC verified, which these functions don't give back."
+functions = [
+    "OCSP_basic_verify",
+    "OCSP_request_verify",
+    "PKCS7_dataFinal",
+    "PKCS7_dataInit",
+    "PKCS7_verify",
+]
+
+[[group]]
+title = "Identifying certificates for OCSP"
+class = "forward"
+reason = "Hashes an issuer's name and key into an OCSP certificate ID, with SHA-1 as RFC 6960 has it by default: an identifier, not a security use, as hashing names for certificate-directory lookup isn't."
+functions = [
+    "OCSP_cert_id_new",
+    "OCSP_cert_to_id",
+]
+
+[[group]]
+title = "Certificates, OCSP and PKCS #7: setting, inspecting and finishing"
+class = "forward"
+reason = "Sets or reads a signature's algorithm field, prints a signature, compares a private key with a certificate's, adds a signer whose key and digest were checked when it was set, or inspects a PKCS #7 structure; or signs with an EVP_MD_CTX whose key and digest EVP_DigestSignInit checked."
+functions = [
+    "ASN1_item_sign_ctx",
+    "OCSP_basic_add1_status",
+    "OCSP_request_is_signed",
+    "PKCS7_add_signer",
+    "PKCS7_get0_signers",
+    "PKCS7_get_signed_attribute",
+    "PKCS7_get_signer_info",
+    "PKCS7_type_is_encrypted",
+    "PKCS7_type_is_signed",
+    "PKCS7_type_is_signedAndEnveloped",
+    "X509_ALGOR_set_md",
+    "X509_CRL_set1_signature_algo",
+    "X509_CRL_sign_ctx",
+    "X509_REQ_check_private_key",
+    "X509_REQ_set1_signature_algo",
+    "X509_REQ_sign_ctx",
+    "X509_check_private_key",
+    "X509_set1_signature_algo",
+    "X509_sign_ctx",
+    "X509_signature_dump",
+]
+
+[[group]]
 title = "Public keys: parameters, checks and operations under way"
 class = "forward"
 reason = "Sets a public-key context's parameters, starts an operation, or continues or finishes one, whose key, digest and padding are checked when the operation runs; loads or checks a key without using it; or encodes data for a padding scheme. Each operation that uses a key is hooked."
@@ -131,10 +179,11 @@ functions = [
 ]
 
 [[group]]
-title = "Reading encrypted private keys and PKCS #12 files"
+title = "Reading encrypted private keys, PKCS #12 files and PKCS #7 envelopes"
 class = "pending"
 reason = "Decrypts, or checks the MAC of, data whose algorithm the data names. Governing it needs the algorithm read from the data before AWS-LC decrypts it."
 functions = [
+    "PKCS7_decrypt",
     "PKCS12_get_key_and_certs",
     "PKCS12_parse",
     "PKCS12_verify_mac",
@@ -151,21 +200,6 @@ functions = [
     "EVP_PKEY_CTX_hkdf_mode",
     "EVP_PKEY_CTX_set1_hkdf_key",
     "EVP_PKEY_CTX_set1_hkdf_salt",
-]
-
-[[group]]
-title = "OCSP"
-class = "pending"
-reason = "Signs or verifies an OCSP message, or hashes a certificate into a certificate ID."
-functions = [
-    "OCSP_basic_add1_status",
-    "OCSP_basic_sign",
-    "OCSP_basic_verify",
-    "OCSP_cert_id_new",
-    "OCSP_cert_to_id",
-    "OCSP_request_is_signed",
-    "OCSP_request_sign",
-    "OCSP_request_verify",
 ]
 
 [[group]]
@@ -220,59 +254,6 @@ functions = [
     "i2d_PKCS8PrivateKey_fp",
     "i2d_PKCS8PrivateKey_nid_bio",
     "i2d_PKCS8PrivateKey_nid_fp",
-]
-
-[[group]]
-title = "PKCS #7"
-class = "pending"
-reason = "Signs, verifies, encrypts or decrypts PKCS #7 content, or chooses its algorithms."
-functions = [
-    "PKCS7_RECIP_INFO_set",
-    "PKCS7_SIGNER_INFO_set",
-    "PKCS7_add_signer",
-    "PKCS7_dataFinal",
-    "PKCS7_dataInit",
-    "PKCS7_decrypt",
-    "PKCS7_encrypt",
-    "PKCS7_get0_signers",
-    "PKCS7_get_signed_attribute",
-    "PKCS7_get_signer_info",
-    "PKCS7_set_cipher",
-    "PKCS7_set_digest",
-    "PKCS7_sign",
-    "PKCS7_type_is_encrypted",
-    "PKCS7_type_is_signed",
-    "PKCS7_type_is_signedAndEnveloped",
-    "PKCS7_verify",
-]
-
-[[group]]
-title = "Signing and verifying certificates, requests and CRLs"
-class = "pending"
-reason = "Signs or verifies with a key and digest, or checks a key against a certificate."
-functions = [
-    "ASN1_item_sign",
-    "ASN1_item_sign_ctx",
-    "ASN1_item_verify",
-    "NETSCAPE_SPKI_sign",
-    "NETSCAPE_SPKI_verify",
-    "X509_ALGOR_set_md",
-    "X509_CRL_set1_signature_algo",
-    "X509_CRL_sign",
-    "X509_CRL_sign_ctx",
-    "X509_CRL_verify",
-    "X509_REQ_check_private_key",
-    "X509_REQ_set1_signature_algo",
-    "X509_REQ_sign",
-    "X509_REQ_sign_ctx",
-    "X509_REQ_verify",
-    "X509_check_private_key",
-    "X509_set1_signature_algo",
-    "X509_sign",
-    "X509_sign_ctx",
-    "X509_signature_dump",
-    "X509_verify",
-    "X509_verify_cert",
 ]
 
 [[group]]
@@ -4696,3 +4677,122 @@ function = "TRUST_TOKEN_generate_key"
 signature = "int TRUST_TOKEN_generate_key(const TRUST_TOKEN_METHOD *method, uint8_t *out_priv_key, size_t *out_priv_key_len, size_t max_priv_key_len, uint8_t *out_pub_key, size_t *out_pub_key_len, size_t max_pub_key_len, uint32_t id)"
 policy = "peios_policy_algorithm(@trust-token.keygen)"
 failure = "0"
+
+# Certificates, CRLs, requests, OCSP and PKCS #7. Signing is checked by its
+# key and digest; verifying by the signature algorithm the object names and
+# the key that checks it. X509_verify_cert checks each signature in a chain
+# AWS-LC accepts. PKCS #7 encrypts content keys to RSA recipients with
+# PKCS #1 v1.5 key transport, checked as such.
+
+[[hook]]
+function = "ASN1_item_sign"
+signature = "int ASN1_item_sign(const ASN1_ITEM *it, X509_ALGOR *algor1, X509_ALGOR *algor2, ASN1_BIT_STRING *signature, void *data, EVP_PKEY *pkey, const EVP_MD *type)"
+policy = "peios_policy_pkey_md(pkey, type, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "ASN1_item_verify"
+signature = "int ASN1_item_verify(const ASN1_ITEM *it, const X509_ALGOR *algor1, const ASN1_BIT_STRING *signature, void *data, EVP_PKEY *pkey)"
+policy = "peios_policy_algor(algor1, pkey, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "NETSCAPE_SPKI_sign"
+signature = "int NETSCAPE_SPKI_sign(NETSCAPE_SPKI *spki, EVP_PKEY *pkey, const EVP_MD *md)"
+policy = "peios_policy_pkey_md(pkey, md, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "NETSCAPE_SPKI_verify"
+signature = "int NETSCAPE_SPKI_verify(NETSCAPE_SPKI *spki, EVP_PKEY *pkey)"
+policy = "peios_policy_algor(spki != NULL ? spki->sig_algor : NULL, pkey, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "X509_sign"
+signature = "int X509_sign(X509 *x509, EVP_PKEY *pkey, const EVP_MD *md)"
+policy = "peios_policy_pkey_md(pkey, md, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "X509_REQ_sign"
+signature = "int X509_REQ_sign(X509_REQ *req, EVP_PKEY *pkey, const EVP_MD *md)"
+policy = "peios_policy_pkey_md(pkey, md, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "X509_CRL_sign"
+signature = "int X509_CRL_sign(X509_CRL *crl, EVP_PKEY *pkey, const EVP_MD *md)"
+policy = "peios_policy_pkey_md(pkey, md, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "X509_verify"
+signature = "int X509_verify(X509 *x509, EVP_PKEY *pkey)"
+policy = "peios_policy_signature(X509_get_signature_nid(x509), pkey, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "X509_REQ_verify"
+signature = "int X509_REQ_verify(X509_REQ *req, EVP_PKEY *pkey)"
+policy = "peios_policy_signature(X509_REQ_get_signature_nid(req), pkey, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "X509_CRL_verify"
+signature = "int X509_CRL_verify(X509_CRL *crl, EVP_PKEY *pkey)"
+policy = "peios_policy_signature(X509_CRL_get_signature_nid(crl), pkey, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "X509_verify_cert"
+signature = "int X509_verify_cert(X509_STORE_CTX *ctx)"
+wrap = "peios_policy_verify_cert"
+
+[[hook]]
+function = "OCSP_basic_sign"
+signature = "int OCSP_basic_sign(OCSP_BASICRESP *resp, X509 *signer, EVP_PKEY *key, const EVP_MD *dgst, struct stack_st_X509 *certs, unsigned long flags)"
+policy = "peios_policy_pkey_md(key, dgst, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "OCSP_request_sign"
+signature = "int OCSP_request_sign(OCSP_REQUEST *req, X509 *signer, EVP_PKEY *key, const EVP_MD *dgst, struct stack_st_X509 *certs, unsigned long flags)"
+policy = "peios_policy_pkey_md(key, dgst, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "PKCS7_sign"
+signature = "PKCS7 *PKCS7_sign(X509 *sign_cert, EVP_PKEY *pkey, struct stack_st_X509 *certs, BIO *data, int flags)"
+policy = "peios_policy_pkey_md(pkey, EVP_sha256(), PEIOS_OP_SIGN)"
+failure = "NULL"
+
+[[hook]]
+function = "PKCS7_SIGNER_INFO_set"
+signature = "int PKCS7_SIGNER_INFO_set(PKCS7_SIGNER_INFO *p7i, X509 *x509, EVP_PKEY *pkey, const EVP_MD *dgst)"
+policy = "peios_policy_pkey_md(pkey, dgst, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "PKCS7_set_digest"
+signature = "int PKCS7_set_digest(PKCS7 *p7, const EVP_MD *md)"
+policy = "peios_policy_digest(md, PEIOS_OP_DIGEST)"
+failure = "0"
+
+[[hook]]
+function = "PKCS7_set_cipher"
+signature = "int PKCS7_set_cipher(PKCS7 *p7, const EVP_CIPHER *cipher)"
+policy = "peios_policy_cipher(cipher, PEIOS_OP_ENCRYPT)"
+failure = "0"
+
+[[hook]]
+function = "PKCS7_RECIP_INFO_set"
+signature = "int PKCS7_RECIP_INFO_set(PKCS7_RECIP_INFO *p7i, X509 *x509)"
+policy = "peios_policy_key_transport(X509_get0_pubkey(x509))"
+failure = "0"
+
+[[hook]]
+function = "PKCS7_encrypt"
+signature = "PKCS7 *PKCS7_encrypt(struct stack_st_X509 *certs, BIO *in, const EVP_CIPHER *cipher, int flags)"
+policy = "peios_policy_cipher(cipher, PEIOS_OP_ENCRYPT) && peios_policy_key_transport_certs(certs)"
+failure = "NULL"
