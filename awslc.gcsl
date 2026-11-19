@@ -1,14 +1,18 @@
-# AWS-LC, the implementation underneath libpcrypto and libpssl: built as the
-# shared libraries `libcrypto-awslc.so.1` and `libssl-awslc.so.1`, AWS-LC's
-# own names for installing beside another libcrypto, with every exported
-# symbol renamed with the prefix `peios_awslc_`. Nothing links them but
-# Peios's wrappers, and nothing can reach their functions by OpenSSL's
-# names, so every call passes the wrappers' policy.
+# AWS-LC, the implementation inside libpcrypto and libpssl: built as static
+# archives of position-independent code, which the wrappers link, with every
+# function renamed with the prefix `peios_awslc_`. The wrappers export only
+# OpenSSL's names, so every call by them passes the wrappers' policy.
 #
 # Prefixing takes two builds, as AWS-LC's BUILDING.md describes. The first,
-# unprefixed and static, gives the list of symbols, which AWS-LC's own
+# unprefixed, gives the list of symbols, which AWS-LC's own
 # `util/read_symbols.go` reads from its archives; the second renames them.
-# Both are compiled with Intel CET's landing pads and shadow-stack marking.
+# Exported data keeps its name: a wrapper can forward a call, but not an
+# address, so the data is exported as AWS-LC defines it. Both builds are
+# compiled with Intel CET's landing pads and shadow-stack marking.
+#
+# A third build, `awslc_reference`, is AWS-LC's own shared libraries with
+# its tests and `bssl` tool, which the wrappers are tested against, and
+# gives the headers the wrappers ship.
 import toolchain
 import Toolchain from toolchain
 import GoToolchain from "github.com/gcslib/go"
@@ -22,72 +26,76 @@ let PREFIX = "peios_awslc"
 # Where AWS-LC is installed, and where its builds have Go and CMake.
 let AWSLC = "/opt/awslc"
 
+let REFERENCE = "/opt/awslc-reference"
+
 let CMAKE = cmake_path()
 
 let GO = "/opt/go"
 
 let SYMBOLS_OUT = "/opt/awslc-symbols"
 
-# The configuration both builds share: AWS-LC's libraries alone, without its
-# tests, its `bssl` tool or Perl, which only regenerates the assembly AWS-LC
-# ships generated; and without rewriting its own sources.
-let CONFIGURE = "-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DBUILD_TOOL=OFF \
-                 -DDISABLE_PERL=ON -DENABLE_SOURCE_MODIFICATION=OFF \
+# The configuration every build shares: AWS-LC without Perl, which only
+# regenerates the assembly AWS-LC ships generated, and without rewriting
+# its own sources.
+let CONFIGURE = "-DCMAKE_BUILD_TYPE=Release -DDISABLE_PERL=ON -DENABLE_SOURCE_MODIFICATION=OFF \
                  -DCMAKE_C_COMPILER=\"$CC\" -DCMAKE_CXX_COMPILER=\"$CXX\" \
                  -DCMAKE_AR=\"$AR\" -DCMAKE_RANLIB=\"$RANLIB\" \
                  -DCMAKE_C_FLAGS=-fcf-protection=full -DCMAKE_CXX_FLAGS=-fcf-protection=full \
                  -DCMAKE_ASM_FLAGS=-fcf-protection=full"
+
+# The libraries alone, without AWS-LC's tests or its `bssl` tool.
+let LIBRARIES = "-DBUILD_TESTING=OFF -DBUILD_TOOL=OFF"
 
 # Go's caches in the build's own temporary directory, and nothing fetched:
 # AWS-LC's Go programs use only Go's standard library.
 let GO_ENV = "export PATH={GO}/bin:$PATH GOCACHE=/tmp/go-cache GOPATH=/tmp/go \
               GOFLAGS=-buildvcs=false GOTOOLCHAIN=local GOPROXY=off GOENV=off"
 
+# Fails unless every object the build in `build` compiled carries the IBT
+# and SHSTK properties.
+let OBJECTS_MARKED = "[ -n \"$(find build -name '*.o' | head -1)\" ] \
+                      || {{ echo 'no objects to check'; exit 1; }}; \
+                      unmarked=$(find build -name '*.o' | while read -r object; do \
+                      \"$READELF\" -n \"$object\" | grep -q 'IBT, SHSTK' || echo \"$object\"; done); \
+                      if [ -n \"$unmarked\" ]; then echo 'objects without IBT and SHSTK:'; \
+                      echo \"$unmarked\" | head -20; exit 1; fi"
+
 def build awslc_source() {
     = fetch_git("https://github.com/aws/aws-lc.git", AWSLC_COMMIT)
 }
 
-# The symbols AWS-LC's static libraries define, one per line: the names the
-# second build renames.
+# The symbols the second build renames, one per line: those AWS-LC's static
+# libraries define, less the data they export, which AWS-LC gives default
+# visibility.
 def build awslc_symbols(go: GoToolchain = toolchain.get(Toolchain::Go)) {
     = installed(
         build awslc_source(),
-        "{GO_ENV}; {CMAKE}/bin/cmake -S . -B build {CONFIGURE} -DBUILD_SHARED_LIBS=OFF \
-         -DDISABLE_GO=ON && {CMAKE}/bin/cmake --build build -j8 \
-         && mkdir -p {SYMBOLS_OUT} && go run ./util/read_symbols.go -out {SYMBOLS_OUT}/symbols.txt \
-         build/crypto/libcrypto.a build/ssl/libssl.a",
+        "{GO_ENV}; {CMAKE}/bin/cmake -S . -B build {CONFIGURE} {LIBRARIES} -DBUILD_SHARED_LIBS=OFF \
+         -DDISABLE_GO=ON; {CMAKE}/bin/cmake --build build -j8; \
+         go run ./util/read_symbols.go -out symbols.txt build/crypto/libcrypto.a build/ssl/libssl.a; \
+         \"$READELF\" -sW build/crypto/libcrypto.a build/ssl/libssl.a \
+         | awk '$4 == \"OBJECT\" && ($5 == \"GLOBAL\" || $5 == \"WEAK\") && $6 == \"DEFAULT\" \
+         && $7 != \"UND\" {{ print $8 }}' | sort -u > data.txt; \
+         [ -s data.txt ] || {{ echo 'AWS-LC exports no data'; exit 1; }}; mkdir -p {SYMBOLS_OUT}; \
+         grep -vxF -f data.txt symbols.txt > {SYMBOLS_OUT}/symbols.txt",
         SYMBOLS_OUT,
         given = [{at = CMAKE; place = build cmake()}, {at = GO; place = go.root}],
     ).file("symbols.txt")
 }
 
-# AWS-LC's shared libraries and headers, every symbol `awslc_symbols` lists
-# prefixed. Its headers map OpenSSL's names to the prefixed ones, so code
-# compiled against them reaches AWS-LC only by the prefixed names.
-#
+# AWS-LC's static archives and headers, every symbol `awslc_symbols` lists
+# prefixed, compiled as position-independent code for the wrappers to link.
 # The build fails unless every object it compiles carries the IBT and SHSTK
-# properties. The libraries themselves can't show them here: Bootlin's
-# glibc start files carry none, so its linker drops them from everything it
-# links. Linked by Peios's own GCC, whose glibc has them, they keep them,
-# and pkgs checks that. AWS-LC's `libcrypto.so` and `libssl.so` links and
-# its `libcrypto`, `libssl` and `openssl` pkg-config files, for linking it
-# as OpenSSL, are removed: only the wrappers link it.
+# properties.
 def build awslc(go: GoToolchain = toolchain.get(Toolchain::Go)) {
     = installed(
         build awslc_source(),
-        "{GO_ENV}; {CMAKE}/bin/cmake -S . -B build {CONFIGURE} -DBUILD_SHARED_LIBS=ON \
-         -DENABLE_PRE_SONAME_BUILD=OFF -DGO_EXECUTABLE={GO}/bin/go \
+        "{GO_ENV}; {CMAKE}/bin/cmake -S . -B build {CONFIGURE} {LIBRARIES} -DBUILD_SHARED_LIBS=OFF \
+         -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DGO_EXECUTABLE={GO}/bin/go \
          -DBORINGSSL_PREFIX={PREFIX} -DBORINGSSL_PREFIX_SYMBOLS=/work/symbols.txt \
-         -DCMAKE_INSTALL_PREFIX={AWSLC} -DCMAKE_INSTALL_LIBDIR=lib \
-         && {CMAKE}/bin/cmake --build build -j8; \
-         [ -n \"$(find build -name '*.o' | head -1)\" ] || {{ echo 'no objects to check'; exit 1; }}; \
-         unmarked=$(find build -name '*.o' | while read -r object; do \
-         \"$READELF\" -n \"$object\" | grep -q 'IBT, SHSTK' || echo \"$object\"; done); \
-         if [ -n \"$unmarked\" ]; then echo 'objects without IBT and SHSTK:'; \
-         echo \"$unmarked\" | head -20; exit 1; fi; \
-         {CMAKE}/bin/cmake --install build; rm {AWSLC}/lib/libcrypto.so {AWSLC}/lib/libssl.so \
-         {AWSLC}/lib/pkgconfig/libcrypto.pc {AWSLC}/lib/pkgconfig/libssl.pc \
-         {AWSLC}/lib/pkgconfig/openssl.pc",
+         -DCMAKE_INSTALL_PREFIX={AWSLC} -DCMAKE_INSTALL_LIBDIR=lib; \
+         {CMAKE}/bin/cmake --build build -j8; {OBJECTS_MARKED}; \
+         {CMAKE}/bin/cmake --install build",
         AWSLC,
         given = [
             {at = CMAKE; place = build cmake()},
@@ -97,8 +105,39 @@ def build awslc(go: GoToolchain = toolchain.get(Toolchain::Go)) {
     )
 }
 
+# AWS-LC's shared libraries, `libcrypto-awslc.so.1` and
+# `libssl-awslc.so.1`, with its `crypto_test` and `ssl_test`, and the test libraries they load, in `tests/` and
+# its `bssl` and `openssl` tools in `bin/`. They're built with the prefix but an empty list
+# of symbols to rename, so their C names are OpenSSL's and their C++ names,
+# in `bssl::peios_awslc`, are libpssl's. Linked in place of these
+# libraries, the wrappers serve the same calls, and their headers are the
+# wrappers'.
+def build awslc_reference(go: GoToolchain = toolchain.get(Toolchain::Go)) {
+    = installed(
+        build awslc_source(),
+        "{GO_ENV}; : > /tmp/no-symbols.txt; {CMAKE}/bin/cmake -S . -B build {CONFIGURE} \
+         -DBUILD_TESTING=ON -DBUILD_TOOL=ON -DBUILD_SHARED_LIBS=ON -DENABLE_PRE_SONAME_BUILD=OFF \
+         -DGO_EXECUTABLE={GO}/bin/go -DBORINGSSL_PREFIX={PREFIX} \
+         -DBORINGSSL_PREFIX_SYMBOLS=/tmp/no-symbols.txt \
+         -DCMAKE_INSTALL_PREFIX={REFERENCE} -DCMAKE_INSTALL_LIBDIR=lib; \
+         {CMAKE}/bin/cmake --build build -j8 --target crypto_test ssl_test bssl openssl; \
+         {CMAKE}/bin/cmake --install build; mkdir -p {REFERENCE}/tests; \
+         for test in crypto_test ssl_test; do \
+         found=$(find build -type f -name $test); [ -n \"$found\" ] || {{ echo \"no $test\"; exit 1; }}; \
+         cp $found {REFERENCE}/tests/; done; \
+         find build -type f -name 'lib*.so*' ! -name 'libcrypto*' ! -name 'libssl*' \
+         -exec cp {{}} {REFERENCE}/tests/ \\;",
+        REFERENCE,
+        given = [{at = CMAKE; place = build cmake()}, {at = GO; place = go.root}],
+    )
+}
+
 def awslc_path() -> String {
     = AWSLC
+}
+
+def awslc_reference_path() -> String {
+    = REFERENCE
 }
 
 def awslc_symbol_prefix() -> String {

@@ -9,45 +9,136 @@ import bin_path from "github.com/gcslib/buildenv"
 
 let TOOL_CC = "/opt/cc"
 
-let AWSLC = awslc_path()
+let PCRYPTO = pcrypto_path()
+
+let REFERENCE = awslc_reference_path()
 
 let PREFIX = awslc_symbol_prefix()
 
-# AWS-LC's libraries keep their own sonames, can't be linked as `-lcrypto`
-# or `-lssl` or found as OpenSSL by pkg-config, and export nothing by an OpenSSL name, so that nothing can
-# bypass the wrappers by linking them. Their objects' CET properties are
-# checked as they're built.
-#
-# libssl's C++ internals are prefixed by namespace, `bssl::peios_awslc`,
-# not by name. One C++ function, `tls_print_all_supported_cipher_suites`,
-# is outside it; OpenSSL has no such name, so it's allowed by name, and any
-# other is a failure.
-def test awslc_exports(
-    awslc: Dir = build awslc(),
+# The shell commands that make the wrappers stand in for AWS-LC's own
+# shared libraries, by their names, for programs built against them, and
+# fail unless `program` would load the wrappers.
+fn as_awslc(program: String) -> String {
+    = "mkdir -p /tmp/lib; ln -s {PCRYPTO}/lib/libpcrypto.so.1 /tmp/lib/libcrypto-awslc.so.1; \
+       ln -s {PCRYPTO}/lib/libpssl.so.1 /tmp/lib/libssl-awslc.so.1; \
+       export LD_LIBRARY_PATH=/tmp/lib:{PCRYPTO}/lib:{REFERENCE}/tests; \
+       LD_TRACE_LOADED_OBJECTS=1 {program} > /tmp/loaded || true; \
+       grep -q 'libcrypto-awslc.so.1 => /tmp/lib/' /tmp/loaded \
+       || {{ echo '{program} would not load the wrappers:'; cat /tmp/loaded; exit 1; }}"
+}
+
+# The wrappers keep their sonames, need no AWS-LC library, carry Intel
+# CET's IBT and SHSTK properties, and export every symbol in their public
+# versions, PCRYPTO_1 and PSSL_1, by a name that isn't prefixed. The one
+# exception is the prefixed names libpssl calls, which libpcrypto exports
+# in PEIOS_AWSLC_PRIVATE.
+def test pcrypto_exports(
+    pcrypto: Dir = build pcrypto(),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
 ) {
     let ran = checked(
-        "cd {AWSLC}/lib; for name in libcrypto.so libssl.so pkgconfig/libcrypto.pc \
-         pkgconfig/libssl.pc pkgconfig/openssl.pc; do \
-         if [ -e $name ]; then echo \"$name would link AWS-LC as OpenSSL\"; exit 1; fi; done; \
-         for lib in libcrypto-awslc libssl-awslc; do \
-         real=$(readlink -f $lib.so); \
-         \"$READELF\" -d \"$real\" | grep -q \"(SONAME).*\\[$lib.so.1\\]\" \
+        "cd {PCRYPTO}/lib; for lib in libpcrypto libpssl; do \
+         \"$READELF\" -d $lib.so.1 | grep -q \"(SONAME).*\\[$lib.so.1\\]\" \
          || {{ echo \"$lib: soname is not $lib.so.1\"; exit 1; }}; \
-         leaked=$(\"$NM\" -D --defined-only \"$real\" | awk 'NF == 3 {{print $3}}' \
-         | grep -v -e '^{PREFIX}_' -e '^_ZN4bssl[0-9]*{PREFIX}' \
-         -e '^_Z37tls_print_all_supported_cipher_suitesb$' || true); \
-         if [ -n \"$leaked\" ]; then echo \"$lib exports unprefixed symbols:\"; \
-         echo \"$leaked\" | head -20; exit 1; fi; done",
-        [{at = AWSLC; place = awslc}],
+         if \"$READELF\" -d $lib.so.1 | grep '(NEEDED)' | grep -E 'awslc|libcrypto|libssl'; then \
+         echo \"$lib needs an AWS-LC or OpenSSL library\"; exit 1; fi; \
+         \"$READELF\" -n $lib.so.1 | grep -q 'IBT, SHSTK' \
+         || {{ echo \"$lib lacks IBT and SHSTK\"; exit 1; }}; done; \
+         exports() {{ \"$READELF\" --dyn-syms -W \"$1\" \
+         | awk '$1 ~ /^[0-9]+:$/ && $7 != \"UND\" && $7 != \"ABS\" {{ print $8 }}'; }}; \
+         bad=$(exports libpcrypto.so.1 | grep -v -e '^[^@]*@@PCRYPTO_1$' \
+         -e '^{PREFIX}_[^@]*@@PEIOS_AWSLC_PRIVATE$' || true); \
+         bad=\"$bad$(exports libpcrypto.so.1 | grep '^{PREFIX}_.*@@PCRYPTO_1$' || true)\"; \
+         bad=\"$bad$(exports libpssl.so.1 | grep -v '^[^@]*@@PSSL_1$' || true)\"; \
+         bad=\"$bad$(exports libpssl.so.1 | grep '^{PREFIX}_' || true)\"; \
+         if [ -n \"$bad\" ]; then echo 'wrongly exported:'; echo \"$bad\" | head -20; exit 1; fi; \
+         for want in SHA256@@PCRYPTO_1 X509_it@@PCRYPTO_1 SSL_CTX_new@@PSSL_1; do \
+         {{ exports libpcrypto.so.1; exports libpssl.so.1; }} | grep -qx \"$want\" \
+         || {{ echo \"$want is not exported\"; exit 1; }}; done",
+        [{at = PCRYPTO; place = pcrypto}],
         c = c,
         env = env,
     )
 }
 
-# Runs `script` with the C toolchain's tools, as `installed` gives them, and
-# `given` placed.
+# AWS-LC's own `crypto_test` passes against libpcrypto. One test, of a
+# connected IPv6 datagram socket, is left out: the sandbox has no IPv6, and
+# the test, unlike its neighbours, doesn't skip itself without it.
+def test awslc_crypto_test(
+    pcrypto: Dir = build pcrypto(),
+    reference: Dir = build awslc_reference(),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let ran = checked(
+        "{as_awslc("{REFERENCE}/tests/crypto_test")}; cd /tmp; {REFERENCE}/tests/crypto_test \
+         --gtest_filter=-AddrFamily/BIODgramTest.SocketDatagramSetConnected/1",
+        [{at = PCRYPTO; place = pcrypto}, {at = "{REFERENCE}/tests"; place = reference.dir("tests")}],
+        c = c,
+        env = env,
+    )
+}
+
+# AWS-LC's own `ssl_test` passes against libpssl and libpcrypto.
+def test awslc_ssl_test(
+    pcrypto: Dir = build pcrypto(),
+    reference: Dir = build awslc_reference(),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let ran = checked(
+        "{as_awslc("{REFERENCE}/tests/ssl_test")}; cd /tmp; {REFERENCE}/tests/ssl_test",
+        [{at = PCRYPTO; place = pcrypto}, {at = "{REFERENCE}/tests"; place = reference.dir("tests")}],
+        c = c,
+        env = env,
+    )
+}
+
+# AWS-LC's `bssl` tool, built against the wrappers' headers, runs against
+# them: it hashes, and generates and signs with a key.
+def test bssl_runs(
+    pcrypto: Dir = build pcrypto(),
+    reference: Dir = build awslc_reference(),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let bssl = "{REFERENCE}/bin/bssl"
+    let ran = checked(
+        "{as_awslc(bssl)}; cd /tmp; printf abc > abc; \
+         {bssl} sha256sum abc | grep -q '^ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad ' \
+         || {{ echo 'bssl sha256sum gave the wrong digest'; exit 1; }}; \
+         {bssl} genrsa -bits 2048 > key.pem; {bssl} sign -key key.pem -digest sha256 < abc > signature; \
+         [ -s signature ] || {{ echo 'bssl sign gave no signature'; exit 1; }}",
+        [{at = PCRYPTO; place = pcrypto}, {at = "{REFERENCE}/bin"; place = reference.dir("bin")}],
+        c = c,
+        env = env,
+    )
+}
+
+# A program compiled against the wrappers' headers and linked with
+# `-lpssl -lpcrypto`, as an OpenSSL consumer is, runs, with a copy
+# relocation for the ASN.1 item table it uses.
+def test consumer_builds(
+    pcrypto: Dir = build pcrypto(),
+    source: File = file("tests/consumer.c"),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let ran = checked(
+        "cd /tmp; \"$CC\" -fPIE -pie -fcf-protection=full -I{PCRYPTO}/include \
+         -o consumer /work/consumer.c -L{PCRYPTO}/lib -lpssl -lpcrypto; \
+         \"$READELF\" -rW consumer | grep -q 'R_X86_64_COPY.*ASN1_OCTET_STRING_it' \
+         || {{ echo 'consumer has no copy relocation for ASN1_OCTET_STRING_it'; exit 1; }}; \
+         LD_LIBRARY_PATH={PCRYPTO}/lib ./consumer",
+        [{at = PCRYPTO; place = pcrypto}, {at = "/work/consumer.c"; place = source}],
+        c = c,
+        env = env,
+    )
+}
+
+# Runs `script` with the C toolchain's compiler and tools, as `installed`
+# gives them, and `given` placed.
 #[hermetic]
 fn checked(
     script: String,
@@ -65,12 +156,13 @@ fn checked(
     let box = fs.compose(placed).sandbox(
         cwd = "/",
         env = {
+            CC = at(c.cc)
             NM = "{binutils}nm"
             READELF = "{binutils}readelf"
             PATH = bin_path(c.runtime)
             HOME = "/tmp"
         },
     )
-    let ran = box.exec("/bin/sh", "-c", "set -e; {script}")
+    let ran = box.exec("/bin/sh", "-c", "set -e; mkdir -p /tmp; {script}")
     = {}
 }

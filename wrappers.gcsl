@@ -1,0 +1,79 @@
+# libpcrypto and libpssl, the OpenSSL-compatible libraries Peios provides:
+# AWS-LC's prefixed archives, linked with forwarders that export each of
+# their functions by its OpenSSL name, and AWS-LC's headers with its
+# pkg-config names, `libcrypto`, `libssl` and `openssl`. The forwarders and
+# version scripts are generated from the archives' own symbol tables by
+# `generate-forwarders.sh`, so every function AWS-LC exports is forwarded,
+# and the build fails on any symbol it can't classify.
+#
+# The tree is laid out to install under `/usr`, as its pkg-config files
+# say. Each library is linked without glibc's `crti.o` and `crtn.o`, whose
+# Bootlin builds lack the IBT and SHSTK properties: shared libraries need
+# neither, as the C runtime calls their constructors from `.init_array`.
+# Each is linked to fail unless every object in it carries the
+# properties.
+import toolchain
+import Toolchain from toolchain
+
+let PCRYPTO = "/opt/pcrypto"
+
+let ARCHIVES = "/work/archives"
+
+let REFERENCE = awslc_reference_path()
+
+let GENERATOR = "/work/generate-forwarders.sh"
+
+# The link both libraries share. Each binds its own calls to its own
+# functions, so that a program can't take over AWS-LC's internal calls by
+# defining a prefixed name libpcrypto exports. Data isn't bound: a program's
+# copy of an exported table is the one every library uses.
+let LINK = "-shared -nostartfiles -Wl,-z,relro,-z,now,-z,noexecstack,-z,cet-report=error \
+            -Wl,--no-undefined -Wl,-Bsymbolic-functions"
+
+# The version AWS-LC's own pkg-config files give: the OpenSSL API it
+# provides.
+let OPENSSL_API = "1.1.1"
+
+def build pcrypto() {
+    = installed(
+        build awslc(),
+        "mkdir -p gen {PCRYPTO}/lib/pkgconfig {PCRYPTO}/include; \
+         \"$READELF\" -sW lib/libcrypto.a > gen/crypto.syms; \
+         \"$READELF\" -sW lib/libssl.a > gen/ssl.syms; \
+         sh {GENERATOR} {awslc_symbol_prefix()} gen/crypto.syms gen/ssl.syms gen; \
+         $CC -c gen/crypto-forwarders.S -o gen/crypto-forwarders.o; \
+         $CC -c gen/ssl-forwarders.S -o gen/ssl-forwarders.o; \
+         begin=$($CC -print-file-name=crtbeginS.o); end=$($CC -print-file-name=crtendS.o); \
+         $CC {LINK} -Wl,-soname,libpcrypto.so.1 -o {PCRYPTO}/lib/libpcrypto.so.1 \"$begin\" \
+         gen/crypto-forwarders.o -Wl,--whole-archive lib/libcrypto.a -Wl,--no-whole-archive \
+         -Wl,--version-script=gen/crypto.map -lpthread \"$end\"; \
+         ln -s libpcrypto.so.1 {PCRYPTO}/lib/libpcrypto.so; \
+         $CXX {LINK} -Wl,-soname,libpssl.so.1 -o {PCRYPTO}/lib/libpssl.so.1 \"$begin\" \
+         gen/ssl-forwarders.o -Wl,--whole-archive lib/libssl.a -Wl,--no-whole-archive \
+         -Wl,--version-script=gen/ssl.map -L{PCRYPTO}/lib -lpcrypto -lpthread \"$end\"; \
+         ln -s libpssl.so.1 {PCRYPTO}/lib/libpssl.so; \
+         cp -R {REFERENCE}/include/openssl {PCRYPTO}/include/; \
+         {pc("libcrypto", "The Peios OpenSSL-compatible cryptography library", "", "-lpcrypto")}; \
+         {pc("libssl", "The Peios OpenSSL-compatible TLS library", "Requires.private: libcrypto", "-lpssl")}; \
+         {pc("openssl", "The Peios OpenSSL-compatible libraries", "Requires: libssl libcrypto", "")}",
+        PCRYPTO,
+        given = [
+            {at = REFERENCE; place = build awslc_reference()},
+            {at = GENERATOR; place = file("generate-forwarders.sh")},
+        ],
+    )
+}
+
+# The shell command that writes the pkg-config file `name`.pc, one line for
+# each of printf's arguments.
+fn pc(name: String, description: String, requires: String, libs: String) -> String {
+    let requires_line = if requires == "" { "" } else { "'{requires}'" }
+    let libs_line = if libs == "" { "" } else { "'Libs: -L${{libdir}} {libs}'" }
+    = "printf '%s\\n' 'prefix=/usr' 'libdir=${{prefix}}/lib' 'includedir=${{prefix}}/include' '' \
+       'Name: {name}' 'Description: {description}' 'Version: {OPENSSL_API}' \
+       {requires_line} {libs_line} 'Cflags: -I${{includedir}}' > {PCRYPTO}/lib/pkgconfig/{name}.pc"
+}
+
+def pcrypto_path() -> String {
+    = PCRYPTO
+}
