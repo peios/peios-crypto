@@ -23,6 +23,7 @@
 #include <openssl/hkdf.h>
 #include <openssl/hmac.h>
 #include <openssl/nid.h>
+#include <openssl/pem.h>
 #include <openssl/pkcs8.h>
 #include <openssl/x509.h>
 #include <openssl/md5.h>
@@ -274,6 +275,16 @@ int main(void) {
           "ML-KEM-768 key generation was refused");
     EVP_PKEY_free(kem_key);
     EVP_PKEY_CTX_free(mlkem);
+
+    // PEM's legacy encryption is checked as its cipher and EVP_BytesToKey.
+    BIO *pem = BIO_new(BIO_s_mem());
+    check(PEM_write_bio_PrivateKey(pem, pkey, EVP_aes_256_cbc(), (uint8_t *)"pw", 2, NULL,
+                                   NULL),
+          "PEM encryption with AES-256-CBC was refused");
+    check(!PEM_write_bio_PrivateKey(pem, pkey, EVP_enc_null(), (uint8_t *)"pw", 2, NULL, NULL) &&
+              refused_with(REFUSED_BY_POLICY),
+          "PEM \"encryption\" with the null cipher wasn't refused");
+    BIO_free(pem);
 
     X509_free(cert);
     EVP_PKEY_free(pkey);

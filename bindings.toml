@@ -27,6 +27,23 @@
 # pending: wrongly pending costs nothing, wrongly forwarded is a hole.
 
 [[group]]
+title = "PEM: unencrypted and already-encrypted data"
+class = "forward"
+reason = "Reads or writes PEM without encrypting: raw blocks, unencrypted PKCS #8 keys, or PKCS #8 keys already encrypted, whose encryption was checked when it was done."
+functions = [
+    "PEM_read",
+    "PEM_read_PKCS8",
+    "PEM_read_bio",
+    "PEM_read_bio_PKCS8",
+    "PEM_write",
+    "PEM_write_PKCS8",
+    "PEM_write_PKCS8_PRIV_KEY_INFO",
+    "PEM_write_bio",
+    "PEM_write_bio_PKCS8",
+    "PEM_write_bio_PKCS8_PRIV_KEY_INFO",
+]
+
+[[group]]
 title = "Verifying signatures inside OCSP and PKCS #7"
 class = "pending"
 reason = "Verifies a signature, or a signer's certificate chain, inside AWS-LC, or runs PKCS #7's encoding or decoding with the algorithms its data names. Governing them needs the signature and chain read from what AWS-LC verified, which these functions don't give back."
@@ -179,10 +196,28 @@ functions = [
 ]
 
 [[group]]
-title = "Reading encrypted private keys, PKCS #12 files and PKCS #7 envelopes"
+title = "Reading encrypted keys, PKCS #12 files, PKCS #7 envelopes and PEM"
 class = "pending"
-reason = "Decrypts, or checks the MAC of, data whose algorithm the data names. Governing it needs the algorithm read from the data before AWS-LC decrypts it."
+reason = "Decrypts, or checks the MAC of, data whose algorithm the data names: encrypted private keys, PKCS #12 files, PKCS #7 envelopes, and PEM with legacy encryption headers, which any PEM read can carry but only private keys use. Governing it needs the algorithm read from the data before AWS-LC decrypts it."
 functions = [
+    "PEM_read_DSAPrivateKey",
+    "PEM_read_ECPrivateKey",
+    "PEM_read_PrivateKey",
+    "PEM_read_RSAPrivateKey",
+    "PEM_read_bio_DSAPrivateKey",
+    "PEM_read_bio_ECPrivateKey",
+    "PEM_read_bio_PrivateKey",
+    "PEM_read_bio_RSAPrivateKey",
+    "PEM_read_PKCS8_PRIV_KEY_INFO",
+    "PEM_read_bio_PKCS8_PRIV_KEY_INFO",
+    "PEM_ASN1_read",
+    "PEM_ASN1_read_bio",
+    "PEM_bytes_read_bio",
+    "PEM_do_header",
+    "PEM_X509_INFO_read",
+    "PEM_X509_INFO_read_bio",
+    "d2i_PKCS8PrivateKey_bio",
+    "d2i_PKCS8PrivateKey_fp",
     "PKCS7_decrypt",
     "PKCS12_get_key_and_certs",
     "PKCS12_parse",
@@ -200,60 +235,6 @@ functions = [
     "EVP_PKEY_CTX_hkdf_mode",
     "EVP_PKEY_CTX_set1_hkdf_key",
     "EVP_PKEY_CTX_set1_hkdf_salt",
-]
-
-[[group]]
-title = "PEM: encrypted private keys"
-class = "pending"
-reason = "Encrypts or decrypts a private key with a cipher and key derivation the caller or the file chooses."
-functions = [
-    "PEM_ASN1_read",
-    "PEM_ASN1_read_bio",
-    "PEM_ASN1_write",
-    "PEM_ASN1_write_bio",
-    "PEM_X509_INFO_read",
-    "PEM_X509_INFO_read_bio",
-    "PEM_bytes_read_bio",
-    "PEM_do_header",
-    "PEM_read",
-    "PEM_read_DSAPrivateKey",
-    "PEM_read_ECPrivateKey",
-    "PEM_read_PKCS8",
-    "PEM_read_PKCS8_PRIV_KEY_INFO",
-    "PEM_read_PrivateKey",
-    "PEM_read_RSAPrivateKey",
-    "PEM_read_bio",
-    "PEM_read_bio_DSAPrivateKey",
-    "PEM_read_bio_ECPrivateKey",
-    "PEM_read_bio_PKCS8",
-    "PEM_read_bio_PKCS8_PRIV_KEY_INFO",
-    "PEM_read_bio_PrivateKey",
-    "PEM_read_bio_RSAPrivateKey",
-    "PEM_write",
-    "PEM_write_DSAPrivateKey",
-    "PEM_write_ECPrivateKey",
-    "PEM_write_PKCS8",
-    "PEM_write_PKCS8PrivateKey",
-    "PEM_write_PKCS8PrivateKey_nid",
-    "PEM_write_PKCS8_PRIV_KEY_INFO",
-    "PEM_write_PrivateKey",
-    "PEM_write_RSAPrivateKey",
-    "PEM_write_bio",
-    "PEM_write_bio_DSAPrivateKey",
-    "PEM_write_bio_ECPrivateKey",
-    "PEM_write_bio_PKCS8",
-    "PEM_write_bio_PKCS8PrivateKey",
-    "PEM_write_bio_PKCS8PrivateKey_nid",
-    "PEM_write_bio_PKCS8_PRIV_KEY_INFO",
-    "PEM_write_bio_PrivateKey",
-    "PEM_write_bio_PrivateKey_traditional",
-    "PEM_write_bio_RSAPrivateKey",
-    "d2i_PKCS8PrivateKey_bio",
-    "d2i_PKCS8PrivateKey_fp",
-    "i2d_PKCS8PrivateKey_bio",
-    "i2d_PKCS8PrivateKey_fp",
-    "i2d_PKCS8PrivateKey_nid_bio",
-    "i2d_PKCS8PrivateKey_nid_fp",
 ]
 
 [[group]]
@@ -4796,3 +4777,121 @@ function = "PKCS7_encrypt"
 signature = "PKCS7 *PKCS7_encrypt(struct stack_st_X509 *certs, BIO *in, const EVP_CIPHER *cipher, int flags)"
 policy = "peios_policy_cipher(cipher, PEIOS_OP_ENCRYPT) && peios_policy_key_transport_certs(certs)"
 failure = "NULL"
+
+# PEM. Its legacy encryption derives the key with EVP_BytesToKey, checked as
+# that KDF and the cipher; PKCS #8 PEM is checked as PKCS8_encrypt is: PBES2
+# with the cipher, PBKDF2 and HMAC-SHA-1, or PKCS #12's scheme by its NID.
+
+[[hook]]
+function = "PEM_write_DSAPrivateKey"
+signature = "int PEM_write_DSAPrivateKey(FILE *fp, DSA *x, const EVP_CIPHER *enc, const unsigned char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_ECPrivateKey"
+signature = "int PEM_write_ECPrivateKey(FILE *fp, EC_KEY *x, const EVP_CIPHER *enc, const unsigned char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_PrivateKey"
+signature = "int PEM_write_PrivateKey(FILE *fp, EVP_PKEY *x, const EVP_CIPHER *enc, const unsigned char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_RSAPrivateKey"
+signature = "int PEM_write_RSAPrivateKey(FILE *fp, RSA *x, const EVP_CIPHER *enc, const unsigned char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_bio_DSAPrivateKey"
+signature = "int PEM_write_bio_DSAPrivateKey(BIO *bp, DSA *x, const EVP_CIPHER *enc, const unsigned char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_bio_ECPrivateKey"
+signature = "int PEM_write_bio_ECPrivateKey(BIO *bp, EC_KEY *x, const EVP_CIPHER *enc, const unsigned char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_bio_PrivateKey"
+signature = "int PEM_write_bio_PrivateKey(BIO *bp, EVP_PKEY *x, const EVP_CIPHER *enc, const unsigned char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_bio_RSAPrivateKey"
+signature = "int PEM_write_bio_RSAPrivateKey(BIO *bp, RSA *x, const EVP_CIPHER *enc, const unsigned char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_bio_PrivateKey_traditional"
+signature = "int PEM_write_bio_PrivateKey_traditional(BIO *bp, EVP_PKEY *x, const EVP_CIPHER *enc, unsigned char *kstr, int klen, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
+failure = "0"
+
+[[hook]]
+function = "PEM_ASN1_write"
+signature = "int PEM_ASN1_write(i2d_of_void *i2d, const char *name, FILE *fp, void *x, const EVP_CIPHER *enc, const unsigned char *pass, int pass_len, pem_password_cb *callback, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
+failure = "0"
+
+[[hook]]
+function = "PEM_ASN1_write_bio"
+signature = "int PEM_ASN1_write_bio(i2d_of_void *i2d, const char *name, BIO *bp, void *x, const EVP_CIPHER *enc, const unsigned char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_PKCS8PrivateKey"
+signature = "int PEM_write_PKCS8PrivateKey(FILE *fp, const EVP_PKEY *x, const EVP_CIPHER *enc, const char *pass, int pass_len, pem_password_cb *cd, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@pbkdf2.kdf) && peios_policy_algorithm(@sha1.hmac))"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_bio_PKCS8PrivateKey"
+signature = "int PEM_write_bio_PKCS8PrivateKey(BIO *bp, const EVP_PKEY *x, const EVP_CIPHER *enc, const char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@pbkdf2.kdf) && peios_policy_algorithm(@sha1.hmac))"
+failure = "0"
+
+[[hook]]
+function = "i2d_PKCS8PrivateKey_bio"
+signature = "int i2d_PKCS8PrivateKey_bio(BIO *bp, const EVP_PKEY *x, const EVP_CIPHER *enc, const char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@pbkdf2.kdf) && peios_policy_algorithm(@sha1.hmac))"
+failure = "0"
+
+[[hook]]
+function = "i2d_PKCS8PrivateKey_fp"
+signature = "int i2d_PKCS8PrivateKey_fp(FILE *fp, const EVP_PKEY *x, const EVP_CIPHER *enc, const char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@pbkdf2.kdf) && peios_policy_algorithm(@sha1.hmac))"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_PKCS8PrivateKey_nid"
+signature = "int PEM_write_PKCS8PrivateKey_nid(FILE *fp, const EVP_PKEY *x, int nid, const char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "peios_policy_pkcs12_pbe(nid)"
+failure = "0"
+
+[[hook]]
+function = "PEM_write_bio_PKCS8PrivateKey_nid"
+signature = "int PEM_write_bio_PKCS8PrivateKey_nid(BIO *bp, const EVP_PKEY *x, int nid, const char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "peios_policy_pkcs12_pbe(nid)"
+failure = "0"
+
+[[hook]]
+function = "i2d_PKCS8PrivateKey_nid_bio"
+signature = "int i2d_PKCS8PrivateKey_nid_bio(BIO *bp, const EVP_PKEY *x, int nid, const char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "peios_policy_pkcs12_pbe(nid)"
+failure = "0"
+
+[[hook]]
+function = "i2d_PKCS8PrivateKey_nid_fp"
+signature = "int i2d_PKCS8PrivateKey_nid_fp(FILE *fp, const EVP_PKEY *x, int nid, const char *pass, int pass_len, pem_password_cb *cb, void *u)"
+policy = "peios_policy_pkcs12_pbe(nid)"
+failure = "0"
