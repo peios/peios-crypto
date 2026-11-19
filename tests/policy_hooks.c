@@ -12,8 +12,12 @@
 #include <openssl/bn.h>
 #include <openssl/cipher.h>
 #include <openssl/cmac.h>
+#include <openssl/curve25519.h>
+#include <openssl/dh.h>
 #include <openssl/digest.h>
+#include <openssl/ec.h>
 #include <openssl/ec_key.h>
+#include <openssl/ecdsa.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/hkdf.h>
@@ -212,8 +216,87 @@ int main(void) {
     PKCS12 *p12 = PKCS12_create("pw", "name", pkey, cert, NULL, 0, -1, 0, 0, 0);
     check(p12 != NULL, "PKCS12_create with unencrypted certificates was refused");
     PKCS12_free(p12);
+
+    // Public keys. A generated key is checked once generated: AWS-LC makes
+    // a 512-bit RSA key, and the hook refuses and frees it.
+    EVP_PKEY_CTX *kctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
+    EVP_PKEY *generated = NULL;
+    check(EVP_PKEY_keygen_init(kctx) && EVP_PKEY_CTX_set_rsa_keygen_bits(kctx, 512) &&
+              !EVP_PKEY_keygen(kctx, &generated) && generated == NULL &&
+              refused_with(REFUSED_BY_POLICY),
+          "EVP_PKEY_keygen kept a 512-bit RSA key");
+    check(EVP_PKEY_CTX_set_rsa_keygen_bits(kctx, 2048) && EVP_PKEY_keygen(kctx, &generated),
+          "EVP_PKEY_keygen refused a 2048-bit RSA key");
+    EVP_PKEY_free(generated);
+    EVP_PKEY_CTX_free(kctx);
+
+    // Signing with the certificate's P-256 key, and verifying the
+    // self-signed certificate as a chain of one.
+    EVP_MD_CTX *sign = EVP_MD_CTX_new();
+    uint8_t signature[128];
+    size_t sig_len = sizeof(signature);
+    check(EVP_DigestSignInit(sign, NULL, EVP_sha256(), NULL, pkey) &&
+              EVP_DigestSign(sign, signature, &sig_len, (const uint8_t *)"abc", 3),
+          "ECDSA P-256 with SHA-256 was refused");
+    EVP_MD_CTX_free(sign);
+    X509_STORE *store = X509_STORE_new();
+    X509_STORE_add_cert(store, cert);
+    X509_STORE_CTX *vctx = X509_STORE_CTX_new();
+    check(X509_STORE_CTX_init(vctx, store, cert, NULL) && X509_verify_cert(vctx) == 1,
+          "a self-signed P-256 certificate didn't verify");
+    X509_STORE_CTX_free(vctx);
+    X509_STORE_free(store);
+
+    uint8_t ed_public[32], ed_private[64], x_public[32], x_private[32], shared[32];
+    ED25519_keypair(ed_public, ed_private);
+    check(ED25519_sign(signature, (const uint8_t *)"abc", 3, ed_private) &&
+              ED25519_verify((const uint8_t *)"abc", 3, signature, ed_public),
+          "Ed25519 was refused");
+    X25519_keypair(x_public, x_private);
+    check(X25519(shared, x_private, x_public), "X25519 was refused");
+
+    DH *dh = DH_new();
+    check(!DH_generate_parameters_ex(dh, 512, 2, NULL) && refused_with(REFUSED_BY_POLICY),
+          "512-bit Diffie-Hellman parameters weren't refused");
+    DH_free(dh);
+
+    EC_KEY *ec = EVP_PKEY_get0_EC_KEY(pkey);
+    uint8_t digest[32] = {0}, nonce[32] = {1};
+    check(ECDSA_sign_with_nonce_and_leak_private_key_for_testing(digest, 32, ec, nonce, 32) ==
+                  NULL &&
+              refused_with(REFUSED_BY_POLICY),
+          "ECDSA with a fixed nonce wasn't refused");
+
+    EVP_PKEY_CTX *mlkem = EVP_PKEY_CTX_new_id(EVP_PKEY_KEM, NULL);
+    EVP_PKEY *kem_key = NULL;
+    check(EVP_PKEY_CTX_kem_set_params(mlkem, NID_MLKEM768) && EVP_PKEY_keygen_init(mlkem) &&
+              EVP_PKEY_keygen(mlkem, &kem_key),
+          "ML-KEM-768 key generation was refused");
+    EVP_PKEY_free(kem_key);
+    EVP_PKEY_CTX_free(mlkem);
+
     X509_free(cert);
     EVP_PKEY_free(pkey);
+
+    // What AWS-LC itself rejects fails with AWS-LC's error, not Peios's,
+    // and doesn't crash: an operation with no context.
+    ERR_clear_error();
+    size_t ct_len = 0, ss_len = 0;
+    check(!EVP_PKEY_encapsulate(NULL, NULL, &ct_len, NULL, &ss_len) &&
+              ERR_GET_LIB(ERR_peek_error()) != ERR_LIB_USER,
+          "EVP_PKEY_encapsulate with no context failed with Peios's error");
+    ERR_clear_error();
+
+    // Every built-in curve is graded.
+    EC_builtin_curve curves[16];
+    size_t n_curves = EC_get_builtin_curves(curves, 16);
+    for (size_t i = 0; i < n_curves; i++) {
+        EC_KEY *curve_key = EC_KEY_new_by_curve_name(curves[i].nid);
+        if (!EC_KEY_generate_key(curve_key)) {
+            check(!refused_with(UNGRADED_ALGORITHM), "a built-in curve isn't graded");
+        }
+        EC_KEY_free(curve_key);
+    }
 
     // Every digest and cipher AWS-LC looks up by NID is graded: none is
     // refused as ungraded.

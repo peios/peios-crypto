@@ -29,11 +29,11 @@ see [Using Cryptography from Rust](~peios/cryptography/using-cryptography-from-r
 - Expect Peios crypto policy to apply to these libraries' callers. The
   current libraries apply it when a program computes a digest or a MAC
   (HMAC, CMAC, Poly1305, or SipHash), starts or keys a cipher or an AEAD,
-  derives a key, encrypts a private key or PKCS #12 file, or generates a
-  key with `RSA_generate_key_ex`. They enforce only the policy's floor,
-  which no machine can loosen: the null ciphers, the 40-bit export-grade
-  RC2 cipher, and RSA keys under 1024 bits. Other calls go straight to
-  AWS-LC for now.
+  derives a key, encrypts a private key or PKCS #12 file, or generates or
+  uses a public key, other than in TLS. They enforce only the policy's
+  floor, which no machine can loosen: the null ciphers, the 40-bit
+  export-grade RC2 cipher, and RSA keys and Diffie-Hellman parameters
+  under 1024 bits. Other calls go straight to AWS-LC for now.
 
 ## Build a C program
 
@@ -110,6 +110,9 @@ not all of OpenSSL 3. Expect to change a program that needs:
 - **A newer OpenSSL version.** libpcrypto reports version 1.1.1 to
   pkg-config and in `OPENSSL_VERSION_NUMBER`, so a build that insists on
   OpenSSL 3 refuses it.
+- **Elliptic curves of your own.** A key on a curve given by its
+  parameters is accepted only if the curve is one of the named curves
+  AWS-LC provides, such as P-256; any other curve is refused.
 - **`PKCS12_create`'s defaults.** AWS-LC encrypts a PKCS #12 file's
   certificates with 40-bit RC2 unless told otherwise, and Peios crypto
   policy refuses it. Pass -1 as `cert_nid` to leave the certificates,

@@ -27,16 +27,21 @@
 # pending: wrongly pending costs nothing, wrongly forwarded is a hole.
 
 [[group]]
-title = "Asymmetric operations through EVP_PKEY"
-class = "pending"
-reason = "Starts or performs a public-key operation, or chooses its digest, padding, size or curve."
+title = "Public keys: parameters, checks and operations under way"
+class = "forward"
+reason = "Sets a public-key context's parameters, starts an operation, or continues or finishes one, whose key, digest and padding are checked when the operation runs; loads or checks a key without using it; or encodes data for a padding scheme. Each operation that uses a key is hooked."
 functions = [
+    "CTR_DRBG_generate",
+    "CTR_DRBG_reseed",
+    "DH_check",
+    "DH_check_pub_key",
+    "EC_KEY_check_fips",
+    "EC_KEY_check_key",
     "EVP_DigestSign",
     "EVP_DigestSignFinal",
-    "EVP_DigestSignInit",
     "EVP_DigestVerify",
     "EVP_DigestVerifyFinal",
-    "EVP_DigestVerifyInit",
+    "EVP_HPKE_KEY_init",
     "EVP_PKEY_CTX_ctrl_str",
     "EVP_PKEY_CTX_kem_set_params",
     "EVP_PKEY_CTX_pqdsa_set_params",
@@ -61,42 +66,59 @@ functions = [
     "EVP_PKEY_CTX_set_signature_context",
     "EVP_PKEY_CTX_set_signature_md",
     "EVP_PKEY_check",
-    "EVP_PKEY_decapsulate",
-    "EVP_PKEY_decrypt",
     "EVP_PKEY_decrypt_init",
-    "EVP_PKEY_derive",
     "EVP_PKEY_derive_init",
     "EVP_PKEY_derive_set_peer",
-    "EVP_PKEY_encapsulate",
-    "EVP_PKEY_encapsulate_deterministic",
-    "EVP_PKEY_encrypt",
     "EVP_PKEY_encrypt_init",
+    "EVP_PKEY_kem_check_key",
+    "EVP_PKEY_kem_get_type",
     "EVP_PKEY_kem_new_raw_key",
     "EVP_PKEY_kem_new_raw_public_key",
     "EVP_PKEY_kem_new_raw_secret_key",
-    "EVP_PKEY_keygen",
-    "EVP_PKEY_keygen_deterministic",
     "EVP_PKEY_keygen_init",
     "EVP_PKEY_new_mac_key",
     "EVP_PKEY_param_check",
-    "EVP_PKEY_paramgen",
     "EVP_PKEY_paramgen_init",
     "EVP_PKEY_pqdsa_new_raw_private_key",
     "EVP_PKEY_pqdsa_new_raw_public_key",
     "EVP_PKEY_public_check",
-    "EVP_PKEY_sign",
     "EVP_PKEY_sign_init",
-    "EVP_PKEY_verify",
     "EVP_PKEY_verify_init",
-    "EVP_PKEY_verify_recover",
     "EVP_PKEY_verify_recover_init",
-    "EVP_SignFinal",
-    "EVP_SignInit",
-    "EVP_SignInit_ex",
-    "EVP_VerifyFinal",
-    "EVP_VerifyInit",
-    "EVP_VerifyInit_ex",
+    "PKCS1_MGF1",
     "RSA_add_pkcs1_prefix",
+    "RSA_blinding_off_temp_for_accp_compatibility",
+    "RSA_blinding_on",
+    "RSA_check_fips",
+    "RSA_check_key",
+    "RSA_get0_pss_params",
+    "RSA_meth_set_sign",
+    "RSA_new_private_key",
+    "RSA_new_private_key_large_e",
+    "RSA_new_private_key_no_crt",
+    "RSA_new_private_key_no_e",
+    "RSA_new_public_key",
+    "RSA_new_public_key_large_e",
+    "RSA_padding_add_PKCS1_OAEP",
+    "RSA_padding_add_PKCS1_OAEP_mgf1",
+    "RSA_padding_add_PKCS1_PSS",
+    "RSA_padding_add_PKCS1_PSS_mgf1",
+    "SPAKE2_CTX_free",
+    "SPAKE2_generate_msg",
+    "SPAKE2_process_msg",
+    "TRUST_TOKEN_CLIENT_add_key",
+    "TRUST_TOKEN_CLIENT_begin_issuance",
+    "TRUST_TOKEN_CLIENT_begin_issuance_over_message",
+    "TRUST_TOKEN_CLIENT_begin_redemption",
+    "TRUST_TOKEN_CLIENT_finish_issuance",
+    "TRUST_TOKEN_CLIENT_finish_redemption",
+    "TRUST_TOKEN_CLIENT_set_srr_key",
+    "TRUST_TOKEN_ISSUER_add_key",
+    "TRUST_TOKEN_ISSUER_issue",
+    "TRUST_TOKEN_ISSUER_redeem",
+    "TRUST_TOKEN_ISSUER_redeem_over_message",
+    "TRUST_TOKEN_ISSUER_set_metadata_key",
+    "TRUST_TOKEN_ISSUER_set_srr_key",
 ]
 
 [[group]]
@@ -106,92 +128,6 @@ reason = "Shortens a variable-length cipher's key, or sets its parameters, after
 functions = [
     "EVP_CIPHER_CTX_ctrl",
     "EVP_CIPHER_CTX_set_key_length",
-]
-
-[[group]]
-title = "Curve25519, SPAKE2, HRSS, HPKE and KEMs"
-class = "pending"
-reason = "Generates keys for, or performs, a public-key scheme."
-functions = [
-    "ED25519_keypair",
-    "ED25519_keypair_from_seed",
-    "ED25519_sign",
-    "ED25519_verify",
-    "ED25519ctx_sign",
-    "ED25519ctx_verify",
-    "ED25519ph_sign",
-    "ED25519ph_sign_digest",
-    "ED25519ph_verify",
-    "ED25519ph_verify_digest",
-    "EVP_HPKE_CTX_setup_auth_recipient",
-    "EVP_HPKE_CTX_setup_auth_sender",
-    "EVP_HPKE_CTX_setup_auth_sender_with_seed_for_testing",
-    "EVP_HPKE_CTX_setup_recipient",
-    "EVP_HPKE_CTX_setup_sender",
-    "EVP_HPKE_CTX_setup_sender_with_seed_for_testing",
-    "EVP_HPKE_KEY_generate",
-    "EVP_HPKE_KEY_init",
-    "EVP_PKEY_kem_check_key",
-    "EVP_PKEY_kem_get_type",
-    "HRSS_decap",
-    "HRSS_encap",
-    "HRSS_generate_key",
-    "SPAKE2_CTX_free",
-    "SPAKE2_CTX_new",
-    "SPAKE2_generate_msg",
-    "SPAKE2_process_msg",
-    "X25519",
-    "X25519_keypair",
-    "X25519_public_from_private",
-]
-
-[[group]]
-title = "DSA operations"
-class = "pending"
-reason = "Generates DSA parameters or keys, or signs or verifies with them."
-functions = [
-    "DSA_check_signature",
-    "DSA_do_check_signature",
-    "DSA_do_sign",
-    "DSA_do_verify",
-    "DSA_generate_key",
-    "DSA_generate_parameters_ex",
-    "DSA_sign",
-    "DSA_verify",
-]
-
-[[group]]
-title = "Diffie-Hellman"
-class = "pending"
-reason = "Generates Diffie-Hellman parameters or keys, or agrees a key."
-functions = [
-    "DH_check",
-    "DH_check_pub_key",
-    "DH_compute_key",
-    "DH_compute_key_hashed",
-    "DH_compute_key_padded",
-    "DH_generate_key",
-    "DH_generate_parameters",
-    "DH_generate_parameters_ex",
-]
-
-[[group]]
-title = "Elliptic-curve key generation and use"
-class = "pending"
-reason = "Generates an EC key, or signs, verifies or agrees a key with one."
-functions = [
-    "ECDH_compute_key",
-    "ECDH_compute_key_fips",
-    "ECDSA_do_sign",
-    "ECDSA_do_verify",
-    "ECDSA_sign",
-    "ECDSA_sign_with_nonce_and_leak_private_key_for_testing",
-    "ECDSA_verify",
-    "EC_KEY_check_fips",
-    "EC_KEY_check_key",
-    "EC_KEY_derive_from_secret",
-    "EC_KEY_generate_key",
-    "EC_KEY_generate_key_fips",
 ]
 
 [[group]]
@@ -308,56 +244,6 @@ functions = [
     "PKCS7_type_is_signed",
     "PKCS7_type_is_signedAndEnveloped",
     "PKCS7_verify",
-]
-
-[[group]]
-title = "RSA operations"
-class = "pending"
-reason = "Generates an RSA key, or signs, verifies, encrypts, decrypts or pads with one."
-functions = [
-    "PKCS1_MGF1",
-    "RSA_blinding_off_temp_for_accp_compatibility",
-    "RSA_blinding_on",
-    "RSA_check_fips",
-    "RSA_check_key",
-    "RSA_decrypt",
-    "RSA_encrypt",
-    "RSA_generate_key",
-    "RSA_generate_key_fips",
-    "RSA_get0_pss_params",
-    "RSA_meth_set_sign",
-    "RSA_new_private_key",
-    "RSA_new_private_key_large_e",
-    "RSA_new_private_key_no_crt",
-    "RSA_new_private_key_no_e",
-    "RSA_new_public_key",
-    "RSA_new_public_key_large_e",
-    "RSA_padding_add_PKCS1_OAEP",
-    "RSA_padding_add_PKCS1_OAEP_mgf1",
-    "RSA_padding_add_PKCS1_PSS",
-    "RSA_padding_add_PKCS1_PSS_mgf1",
-    "RSA_private_decrypt",
-    "RSA_private_encrypt",
-    "RSA_public_decrypt",
-    "RSA_public_encrypt",
-    "RSA_sign",
-    "RSA_sign_pss_mgf1",
-    "RSA_sign_raw",
-    "RSA_verify",
-    "RSA_verify_PKCS1_PSS",
-    "RSA_verify_PKCS1_PSS_mgf1",
-    "RSA_verify_pss_mgf1",
-    "RSA_verify_raw",
-]
-
-[[group]]
-title = "Random-number generators used directly"
-class = "pending"
-reason = "Runs a deterministic random-bit generator directly."
-functions = [
-    "CTR_DRBG_generate",
-    "CTR_DRBG_new",
-    "CTR_DRBG_reseed",
 ]
 
 [[group]]
@@ -562,30 +448,6 @@ functions = [
     "TLSv1_client_method",
     "TLSv1_method",
     "TLSv1_server_method",
-]
-
-[[group]]
-title = "Trust tokens"
-class = "pending"
-reason = "Runs the trust-token protocol, whose cryptography the method chooses."
-functions = [
-    "TRUST_TOKEN_CLIENT_add_key",
-    "TRUST_TOKEN_CLIENT_begin_issuance",
-    "TRUST_TOKEN_CLIENT_begin_issuance_over_message",
-    "TRUST_TOKEN_CLIENT_begin_redemption",
-    "TRUST_TOKEN_CLIENT_finish_issuance",
-    "TRUST_TOKEN_CLIENT_finish_redemption",
-    "TRUST_TOKEN_CLIENT_new",
-    "TRUST_TOKEN_CLIENT_set_srr_key",
-    "TRUST_TOKEN_ISSUER_add_key",
-    "TRUST_TOKEN_ISSUER_issue",
-    "TRUST_TOKEN_ISSUER_new",
-    "TRUST_TOKEN_ISSUER_redeem",
-    "TRUST_TOKEN_ISSUER_redeem_over_message",
-    "TRUST_TOKEN_ISSUER_set_metadata_key",
-    "TRUST_TOKEN_ISSUER_set_srr_key",
-    "TRUST_TOKEN_derive_key_from_secret",
-    "TRUST_TOKEN_generate_key",
 ]
 
 [[group]]
@@ -4296,4 +4158,541 @@ failure = "NULL"
 function = "PKCS12_set_mac"
 signature = "int PKCS12_set_mac(PKCS12 *p12, const char *password, int password_len, unsigned char *salt, int salt_len, int mac_iterations, const EVP_MD *md)"
 policy = "peios_policy_digest(md != NULL ? md : EVP_sha1(), PEIOS_OP_HMAC)"
+failure = "0"
+
+# Public keys. A key is checked where it's used: by its family and its
+# size, curve or parameter set, a signature also by its digest, and an RSA
+# operation by its padding. Generated keys and parameters, whose size or
+# curve the API gives no way to read first, are checked once generated,
+# and freed if refused, as AWS-LC frees them when it fails.
+
+[[hook]]
+function = "EVP_DigestSignInit"
+signature = "int EVP_DigestSignInit(EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx, const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey)"
+policy = "peios_policy_pkey_md(pkey, type, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "EVP_DigestVerifyInit"
+signature = "int EVP_DigestVerifyInit(EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx, const EVP_MD *type, ENGINE *e, EVP_PKEY *pkey)"
+policy = "peios_policy_pkey_md(pkey, type, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "EVP_PKEY_decapsulate"
+signature = "int EVP_PKEY_decapsulate(EVP_PKEY_CTX *ctx, uint8_t *shared_secret, size_t *shared_secret_len, const uint8_t *ciphertext, size_t ciphertext_len)"
+policy = "peios_policy_pkey_ctx(ctx, PEIOS_OP_DECAPSULATE)"
+failure = "0"
+
+[[hook]]
+function = "EVP_PKEY_decrypt"
+signature = "int EVP_PKEY_decrypt(EVP_PKEY_CTX *ctx, uint8_t *out, size_t *out_len, const uint8_t *in, size_t in_len)"
+policy = "peios_policy_pkey_ctx(ctx, PEIOS_OP_DECRYPT)"
+failure = "0"
+
+[[hook]]
+function = "EVP_PKEY_derive"
+signature = "int EVP_PKEY_derive(EVP_PKEY_CTX *ctx, uint8_t *key, size_t *out_key_len)"
+policy = "peios_policy_pkey_ctx(ctx, PEIOS_OP_DERIVE)"
+failure = "0"
+
+[[hook]]
+function = "EVP_PKEY_encapsulate"
+signature = "int EVP_PKEY_encapsulate(EVP_PKEY_CTX *ctx, uint8_t *ciphertext, size_t *ciphertext_len, uint8_t *shared_secret, size_t *shared_secret_len)"
+policy = "peios_policy_pkey_ctx(ctx, PEIOS_OP_ENCAPSULATE)"
+failure = "0"
+
+[[hook]]
+function = "EVP_PKEY_encapsulate_deterministic"
+signature = "int EVP_PKEY_encapsulate_deterministic(EVP_PKEY_CTX *ctx, uint8_t *ciphertext, size_t *ciphertext_len, uint8_t *shared_secret, size_t *shared_secret_len, const uint8_t *seed, size_t *seed_len)"
+policy = "peios_policy_pkey_ctx(ctx, PEIOS_OP_ENCAPSULATE)"
+failure = "0"
+
+[[hook]]
+function = "EVP_PKEY_encrypt"
+signature = "int EVP_PKEY_encrypt(EVP_PKEY_CTX *ctx, uint8_t *out, size_t *out_len, const uint8_t *in, size_t in_len)"
+policy = "peios_policy_pkey_ctx(ctx, PEIOS_OP_ENCRYPT)"
+failure = "0"
+
+[[hook]]
+function = "EVP_PKEY_keygen"
+signature = "int EVP_PKEY_keygen(EVP_PKEY_CTX *ctx, EVP_PKEY **out_pkey)"
+wrap = "peios_policy_keygen"
+
+[[hook]]
+function = "EVP_PKEY_keygen_deterministic"
+signature = "int EVP_PKEY_keygen_deterministic(EVP_PKEY_CTX *ctx, EVP_PKEY **out_pkey, const uint8_t *seed, size_t *seed_len)"
+wrap = "peios_policy_keygen_deterministic"
+
+[[hook]]
+function = "EVP_PKEY_paramgen"
+signature = "int EVP_PKEY_paramgen(EVP_PKEY_CTX *ctx, EVP_PKEY **out_pkey)"
+wrap = "peios_policy_paramgen"
+
+[[hook]]
+function = "EVP_PKEY_sign"
+signature = "int EVP_PKEY_sign(EVP_PKEY_CTX *ctx, uint8_t *sig, size_t *sig_len, const uint8_t *digest, size_t digest_len)"
+policy = "peios_policy_pkey_ctx(ctx, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "EVP_PKEY_verify"
+signature = "int EVP_PKEY_verify(EVP_PKEY_CTX *ctx, const uint8_t *sig, size_t sig_len, const uint8_t *digest, size_t digest_len)"
+policy = "peios_policy_pkey_ctx(ctx, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "EVP_PKEY_verify_recover"
+signature = "int EVP_PKEY_verify_recover(EVP_PKEY_CTX *ctx, uint8_t *out, size_t *out_len, const uint8_t *sig, size_t siglen)"
+policy = "peios_policy_pkey_ctx(ctx, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "EVP_SignFinal"
+signature = "int EVP_SignFinal(const EVP_MD_CTX *ctx, uint8_t *sig, unsigned int *out_sig_len, EVP_PKEY *pkey)"
+policy = "peios_policy_pkey_md(pkey, EVP_MD_CTX_md(ctx), PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "EVP_SignInit"
+signature = "int EVP_SignInit(EVP_MD_CTX *ctx, const EVP_MD *type)"
+policy = "peios_policy_digest(type, PEIOS_OP_DIGEST)"
+failure = "0"
+
+[[hook]]
+function = "EVP_SignInit_ex"
+signature = "int EVP_SignInit_ex(EVP_MD_CTX *ctx, const EVP_MD *type, ENGINE *impl)"
+policy = "peios_policy_digest(type, PEIOS_OP_DIGEST)"
+failure = "0"
+
+[[hook]]
+function = "EVP_VerifyFinal"
+signature = "int EVP_VerifyFinal(EVP_MD_CTX *ctx, const uint8_t *sig, size_t sig_len, EVP_PKEY *pkey)"
+policy = "peios_policy_pkey_md(pkey, EVP_MD_CTX_md(ctx), PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "EVP_VerifyInit"
+signature = "int EVP_VerifyInit(EVP_MD_CTX *ctx, const EVP_MD *type)"
+policy = "peios_policy_digest(type, PEIOS_OP_DIGEST)"
+failure = "0"
+
+[[hook]]
+function = "EVP_VerifyInit_ex"
+signature = "int EVP_VerifyInit_ex(EVP_MD_CTX *ctx, const EVP_MD *type, ENGINE *impl)"
+policy = "peios_policy_digest(type, PEIOS_OP_DIGEST)"
+failure = "0"
+
+[[hook]]
+function = "ED25519_keypair"
+signature = "void ED25519_keypair(uint8_t out_public_key[32], uint8_t out_private_key[64])"
+policy = "peios_policy_algorithm(@ed25519.keygen)"
+failure = "abort"
+
+[[hook]]
+function = "ED25519_keypair_from_seed"
+signature = "void ED25519_keypair_from_seed(uint8_t out_public_key[32], uint8_t out_private_key[64], const uint8_t seed[32])"
+policy = "peios_policy_algorithm(@ed25519.keygen)"
+failure = "abort"
+
+[[hook]]
+function = "ED25519_sign"
+signature = "int ED25519_sign(uint8_t out_sig[64], const uint8_t *message, size_t message_len, const uint8_t private_key[64])"
+policy = "peios_policy_algorithm(@ed25519.sign)"
+failure = "0"
+
+[[hook]]
+function = "ED25519_verify"
+signature = "int ED25519_verify(const uint8_t *message, size_t message_len, const uint8_t signature[64], const uint8_t public_key[32])"
+policy = "peios_policy_algorithm(@ed25519.verify)"
+failure = "0"
+
+[[hook]]
+function = "ED25519ctx_sign"
+signature = "int ED25519ctx_sign(uint8_t out_sig[64], const uint8_t *message, size_t message_len, const uint8_t private_key[64], const uint8_t *context, size_t context_len)"
+policy = "peios_policy_algorithm(@ed25519.sign)"
+failure = "0"
+
+[[hook]]
+function = "ED25519ctx_verify"
+signature = "int ED25519ctx_verify(const uint8_t *message, size_t message_len, const uint8_t signature[64], const uint8_t public_key[32], const uint8_t *context, size_t context_len)"
+policy = "peios_policy_algorithm(@ed25519.verify)"
+failure = "0"
+
+[[hook]]
+function = "ED25519ph_sign"
+signature = "int ED25519ph_sign(uint8_t out_sig[64], const uint8_t *message, size_t message_len, const uint8_t private_key[64], const uint8_t *context, size_t context_len)"
+policy = "peios_policy_algorithm(@ed25519.sign)"
+failure = "0"
+
+[[hook]]
+function = "ED25519ph_sign_digest"
+signature = "int ED25519ph_sign_digest(uint8_t out_sig[64], const uint8_t digest[64], const uint8_t private_key[64], const uint8_t *context, size_t context_len)"
+policy = "peios_policy_algorithm(@ed25519.sign)"
+failure = "0"
+
+[[hook]]
+function = "ED25519ph_verify"
+signature = "int ED25519ph_verify(const uint8_t *message, size_t message_len, const uint8_t signature[64], const uint8_t public_key[32], const uint8_t *context, size_t context_len)"
+policy = "peios_policy_algorithm(@ed25519.verify)"
+failure = "0"
+
+[[hook]]
+function = "ED25519ph_verify_digest"
+signature = "int ED25519ph_verify_digest(const uint8_t digest[64], const uint8_t signature[64], const uint8_t public_key[32], const uint8_t *context, size_t context_len)"
+policy = "peios_policy_algorithm(@ed25519.verify)"
+failure = "0"
+
+[[hook]]
+function = "EVP_HPKE_CTX_setup_auth_recipient"
+signature = "int EVP_HPKE_CTX_setup_auth_recipient(EVP_HPKE_CTX *ctx, const EVP_HPKE_KEY *key, const EVP_HPKE_KDF *kdf, const EVP_HPKE_AEAD *aead, const uint8_t *enc, size_t enc_len, const uint8_t *info, size_t info_len, const uint8_t *peer_public_key, size_t peer_public_key_len)"
+policy = "peios_policy_hpke(EVP_HPKE_KEY_kem(key), kdf, aead, 0)"
+failure = "0"
+
+[[hook]]
+function = "EVP_HPKE_CTX_setup_auth_sender"
+signature = "int EVP_HPKE_CTX_setup_auth_sender(EVP_HPKE_CTX *ctx, uint8_t *out_enc, size_t *out_enc_len, size_t max_enc, const EVP_HPKE_KEY *key, const EVP_HPKE_KDF *kdf, const EVP_HPKE_AEAD *aead, const uint8_t *peer_public_key, size_t peer_public_key_len, const uint8_t *info, size_t info_len)"
+policy = "peios_policy_hpke(EVP_HPKE_KEY_kem(key), kdf, aead, 1)"
+failure = "0"
+
+[[hook]]
+function = "EVP_HPKE_CTX_setup_auth_sender_with_seed_for_testing"
+signature = "int EVP_HPKE_CTX_setup_auth_sender_with_seed_for_testing(EVP_HPKE_CTX *ctx, uint8_t *out_enc, size_t *out_enc_len, size_t max_enc, const EVP_HPKE_KEY *key, const EVP_HPKE_KDF *kdf, const EVP_HPKE_AEAD *aead, const uint8_t *peer_public_key, size_t peer_public_key_len, const uint8_t *info, size_t info_len, const uint8_t *seed, size_t seed_len)"
+policy = "peios_policy_hpke(EVP_HPKE_KEY_kem(key), kdf, aead, 1)"
+failure = "0"
+
+[[hook]]
+function = "EVP_HPKE_CTX_setup_recipient"
+signature = "int EVP_HPKE_CTX_setup_recipient(EVP_HPKE_CTX *ctx, const EVP_HPKE_KEY *key, const EVP_HPKE_KDF *kdf, const EVP_HPKE_AEAD *aead, const uint8_t *enc, size_t enc_len, const uint8_t *info, size_t info_len)"
+policy = "peios_policy_hpke(EVP_HPKE_KEY_kem(key), kdf, aead, 0)"
+failure = "0"
+
+[[hook]]
+function = "EVP_HPKE_CTX_setup_sender"
+signature = "int EVP_HPKE_CTX_setup_sender(EVP_HPKE_CTX *ctx, uint8_t *out_enc, size_t *out_enc_len, size_t max_enc, const EVP_HPKE_KEM *kem, const EVP_HPKE_KDF *kdf, const EVP_HPKE_AEAD *aead, const uint8_t *peer_public_key, size_t peer_public_key_len, const uint8_t *info, size_t info_len)"
+policy = "peios_policy_hpke(kem, kdf, aead, 1)"
+failure = "0"
+
+[[hook]]
+function = "EVP_HPKE_CTX_setup_sender_with_seed_for_testing"
+signature = "int EVP_HPKE_CTX_setup_sender_with_seed_for_testing(EVP_HPKE_CTX *ctx, uint8_t *out_enc, size_t *out_enc_len, size_t max_enc, const EVP_HPKE_KEM *kem, const EVP_HPKE_KDF *kdf, const EVP_HPKE_AEAD *aead, const uint8_t *peer_public_key, size_t peer_public_key_len, const uint8_t *info, size_t info_len, const uint8_t *seed, size_t seed_len)"
+policy = "peios_policy_hpke(kem, kdf, aead, 1)"
+failure = "0"
+
+[[hook]]
+function = "EVP_HPKE_KEY_generate"
+signature = "int EVP_HPKE_KEY_generate(EVP_HPKE_KEY *key, const EVP_HPKE_KEM *kem)"
+policy = "peios_policy_hpke_kem(kem, PEIOS_OP_KEYGEN)"
+failure = "0"
+
+[[hook]]
+function = "HRSS_decap"
+signature = "int HRSS_decap(uint8_t out_shared_key[32], const struct HRSS_private_key *in_priv, const uint8_t *ciphertext, size_t ciphertext_len)"
+policy = "peios_policy_algorithm(@hrss.decapsulate)"
+failure = "0"
+
+[[hook]]
+function = "HRSS_encap"
+signature = "int HRSS_encap(uint8_t out_ciphertext[1138], uint8_t out_shared_key[32], const struct HRSS_public_key *in_pub, const uint8_t in[((701 - 1) + (701 - 1))])"
+policy = "peios_policy_algorithm(@hrss.encapsulate)"
+failure = "0"
+
+[[hook]]
+function = "HRSS_generate_key"
+signature = "int HRSS_generate_key(struct HRSS_public_key *out_pub, struct HRSS_private_key *out_priv, const uint8_t input[((701 - 1) + (701 - 1) + 32)])"
+policy = "peios_policy_algorithm(@hrss.keygen)"
+failure = "0"
+
+[[hook]]
+function = "SPAKE2_CTX_new"
+signature = "SPAKE2_CTX *SPAKE2_CTX_new(enum spake2_role_t my_role, const uint8_t *my_name, size_t my_name_len, const uint8_t *their_name, size_t their_name_len)"
+policy = "peios_policy_algorithm(@spake2.derive)"
+failure = "NULL"
+
+[[hook]]
+function = "X25519"
+signature = "int X25519(uint8_t out_shared_key[32], const uint8_t private_key[32], const uint8_t peer_public_value[32])"
+policy = "peios_policy_algorithm(@x25519.derive)"
+failure = "0"
+
+[[hook]]
+function = "X25519_keypair"
+signature = "void X25519_keypair(uint8_t out_public_value[32], uint8_t out_private_key[32])"
+policy = "peios_policy_algorithm(@x25519.keygen)"
+failure = "abort"
+
+[[hook]]
+function = "X25519_public_from_private"
+signature = "void X25519_public_from_private(uint8_t out_public_value[32], const uint8_t private_key[32])"
+policy = "peios_policy_algorithm(@x25519.keygen)"
+failure = "abort"
+
+[[hook]]
+function = "DSA_check_signature"
+signature = "int DSA_check_signature(int *out_valid, const uint8_t *digest, size_t digest_len, const uint8_t *sig, size_t sig_len, const DSA *dsa)"
+policy = "peios_policy_algorithm(@dsa.verify)"
+failure = "0"
+
+[[hook]]
+function = "DSA_do_check_signature"
+signature = "int DSA_do_check_signature(int *out_valid, const uint8_t *digest, size_t digest_len, const DSA_SIG *sig, const DSA *dsa)"
+policy = "peios_policy_algorithm(@dsa.verify)"
+failure = "0"
+
+[[hook]]
+function = "DSA_do_sign"
+signature = "DSA_SIG *DSA_do_sign(const uint8_t *digest, size_t digest_len, const DSA *dsa)"
+policy = "peios_policy_algorithm(@dsa.sign)"
+failure = "NULL"
+
+[[hook]]
+function = "DSA_do_verify"
+signature = "int DSA_do_verify(const uint8_t *digest, size_t digest_len, const DSA_SIG *sig, const DSA *dsa)"
+policy = "peios_policy_algorithm(@dsa.verify)"
+failure = "0"
+
+[[hook]]
+function = "DSA_generate_key"
+signature = "int DSA_generate_key(DSA *dsa)"
+policy = "peios_policy_algorithm(@dsa.keygen)"
+failure = "0"
+
+[[hook]]
+function = "DSA_generate_parameters_ex"
+signature = "int DSA_generate_parameters_ex(DSA *dsa, unsigned bits, const uint8_t *seed, size_t seed_len, int *out_counter, unsigned long *out_h, BN_GENCB *cb)"
+policy = "peios_policy_algorithm(@dsa.keygen)"
+failure = "0"
+
+[[hook]]
+function = "DSA_sign"
+signature = "int DSA_sign(int type, const uint8_t *digest, size_t digest_len, uint8_t *out_sig, unsigned int *out_siglen, const DSA *dsa)"
+policy = "peios_policy_algorithm(@dsa.sign)"
+failure = "0"
+
+[[hook]]
+function = "DSA_verify"
+signature = "int DSA_verify(int type, const uint8_t *digest, size_t digest_len, const uint8_t *sig, size_t sig_len, const DSA *dsa)"
+policy = "peios_policy_algorithm(@dsa.verify)"
+failure = "0"
+
+[[hook]]
+function = "DH_compute_key"
+signature = "int DH_compute_key(uint8_t *out, const BIGNUM *peers_key, DH *dh)"
+policy = "peios_policy_dh(dh, PEIOS_OP_DERIVE)"
+failure = "-1"
+
+[[hook]]
+function = "DH_compute_key_hashed"
+signature = "int DH_compute_key_hashed(DH *dh, uint8_t *out, size_t *out_len, size_t max_out_len, const BIGNUM *peers_key, const EVP_MD *digest)"
+policy = "peios_policy_dh(dh, PEIOS_OP_DERIVE) && peios_policy_digest(digest, PEIOS_OP_HMAC)"
+failure = "0"
+
+[[hook]]
+function = "DH_compute_key_padded"
+signature = "int DH_compute_key_padded(uint8_t *out, const BIGNUM *peers_key, DH *dh)"
+policy = "peios_policy_dh(dh, PEIOS_OP_DERIVE)"
+failure = "-1"
+
+[[hook]]
+function = "DH_generate_key"
+signature = "int DH_generate_key(DH *dh)"
+policy = "peios_policy_dh(dh, PEIOS_OP_KEYGEN)"
+failure = "0"
+
+[[hook]]
+function = "DH_generate_parameters"
+signature = "DH *DH_generate_parameters(int prime_len, int generator, void (*callback)(int, int, void *), void *cb_arg)"
+policy = "peios_policy_dh_bits(prime_len, PEIOS_OP_KEYGEN)"
+failure = "NULL"
+
+[[hook]]
+function = "DH_generate_parameters_ex"
+signature = "int DH_generate_parameters_ex(DH *dh, int prime_bits, int generator, BN_GENCB *cb)"
+policy = "peios_policy_dh_bits(prime_bits, PEIOS_OP_KEYGEN)"
+failure = "0"
+
+[[hook]]
+function = "ECDH_compute_key"
+signature = "int ECDH_compute_key(void *out, size_t outlen, const EC_POINT *pub_key, const EC_KEY *priv_key, void *(*kdf)(const void *in, size_t inlen, void *out, size_t *outlen))"
+policy = "peios_policy_ec_key(priv_key, PEIOS_OP_DERIVE)"
+failure = "-1"
+
+[[hook]]
+function = "ECDH_compute_key_fips"
+signature = "int ECDH_compute_key_fips(uint8_t *out, size_t out_len, const EC_POINT *pub_key, const EC_KEY *priv_key)"
+policy = "peios_policy_ec_key(priv_key, PEIOS_OP_DERIVE)"
+failure = "0"
+
+[[hook]]
+function = "ECDSA_do_sign"
+signature = "ECDSA_SIG *ECDSA_do_sign(const uint8_t *digest, size_t digest_len, const EC_KEY *key)"
+policy = "peios_policy_ec_key(key, PEIOS_OP_SIGN)"
+failure = "NULL"
+
+[[hook]]
+function = "ECDSA_do_verify"
+signature = "int ECDSA_do_verify(const uint8_t *digest, size_t digest_len, const ECDSA_SIG *sig, const EC_KEY *key)"
+policy = "peios_policy_ec_key(key, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "ECDSA_sign"
+signature = "int ECDSA_sign(int type, const uint8_t *digest, size_t digest_len, uint8_t *sig, unsigned int *sig_len, const EC_KEY *key)"
+policy = "peios_policy_ec_key(key, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "ECDSA_sign_with_nonce_and_leak_private_key_for_testing"
+signature = "ECDSA_SIG *ECDSA_sign_with_nonce_and_leak_private_key_for_testing(const uint8_t *digest, size_t digest_len, const EC_KEY *eckey, const uint8_t *nonce, size_t nonce_len)"
+policy = "peios_policy_algorithm(@ecdsa-fixed-nonce.sign)"
+failure = "NULL"
+
+[[hook]]
+function = "ECDSA_verify"
+signature = "int ECDSA_verify(int type, const uint8_t *digest, size_t digest_len, const uint8_t *sig, size_t sig_len, const EC_KEY *key)"
+policy = "peios_policy_ec_key(key, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "EC_KEY_derive_from_secret"
+signature = "EC_KEY *EC_KEY_derive_from_secret(const EC_GROUP *group, const uint8_t *secret, size_t secret_len)"
+policy = "peios_policy_ec_group(group, PEIOS_OP_KEYGEN)"
+failure = "NULL"
+
+[[hook]]
+function = "EC_KEY_generate_key"
+signature = "int EC_KEY_generate_key(EC_KEY *key)"
+policy = "peios_policy_ec_key(key, PEIOS_OP_KEYGEN)"
+failure = "0"
+
+[[hook]]
+function = "EC_KEY_generate_key_fips"
+signature = "int EC_KEY_generate_key_fips(EC_KEY *key)"
+policy = "peios_policy_ec_key(key, PEIOS_OP_KEYGEN)"
+failure = "0"
+
+[[hook]]
+function = "RSA_decrypt"
+signature = "int RSA_decrypt(RSA *rsa, size_t *out_len, uint8_t *out, size_t max_out, const uint8_t *in, size_t in_len, int padding)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_DECRYPT) && peios_policy_rsa_padding(padding, PEIOS_OP_DECRYPT)"
+failure = "0"
+
+[[hook]]
+function = "RSA_encrypt"
+signature = "int RSA_encrypt(RSA *rsa, size_t *out_len, uint8_t *out, size_t max_out, const uint8_t *in, size_t in_len, int padding)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_ENCRYPT) && peios_policy_rsa_padding(padding, PEIOS_OP_ENCRYPT)"
+failure = "0"
+
+[[hook]]
+function = "RSA_generate_key"
+signature = "RSA *RSA_generate_key(int bits, uint64_t e, void *callback, void *cb_arg)"
+policy = "peios_policy_rsa_keygen(bits)"
+failure = "NULL"
+
+[[hook]]
+function = "RSA_generate_key_fips"
+signature = "int RSA_generate_key_fips(RSA *rsa, int bits, BN_GENCB *cb)"
+policy = "peios_policy_rsa_keygen(bits)"
+failure = "0"
+
+[[hook]]
+function = "RSA_private_decrypt"
+signature = "int RSA_private_decrypt(size_t flen, const uint8_t *from, uint8_t *to, RSA *rsa, int padding)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_DECRYPT) && peios_policy_rsa_padding(padding, PEIOS_OP_DECRYPT)"
+failure = "-1"
+
+[[hook]]
+function = "RSA_private_encrypt"
+signature = "int RSA_private_encrypt(size_t flen, const uint8_t *from, uint8_t *to, RSA *rsa, int padding)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_SIGN) && peios_policy_rsa_padding(padding, PEIOS_OP_SIGN)"
+failure = "-1"
+
+[[hook]]
+function = "RSA_public_decrypt"
+signature = "int RSA_public_decrypt(size_t flen, const uint8_t *from, uint8_t *to, RSA *rsa, int padding)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_VERIFY) && peios_policy_rsa_padding(padding, PEIOS_OP_VERIFY)"
+failure = "-1"
+
+[[hook]]
+function = "RSA_public_encrypt"
+signature = "int RSA_public_encrypt(size_t flen, const uint8_t *from, uint8_t *to, RSA *rsa, int padding)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_ENCRYPT) && peios_policy_rsa_padding(padding, PEIOS_OP_ENCRYPT)"
+failure = "-1"
+
+[[hook]]
+function = "RSA_sign"
+signature = "int RSA_sign(int hash_nid, const uint8_t *digest, size_t digest_len, uint8_t *out, unsigned *out_len, RSA *rsa)"
+policy = "peios_policy_rsa_nid(rsa, hash_nid, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "RSA_sign_pss_mgf1"
+signature = "int RSA_sign_pss_mgf1(RSA *rsa, size_t *out_len, uint8_t *out, size_t max_out, const uint8_t *digest, size_t digest_len, const EVP_MD *md, const EVP_MD *mgf1_md, int salt_len)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_SIGN) && peios_policy_digest(md, PEIOS_OP_DIGEST)"
+failure = "0"
+
+[[hook]]
+function = "RSA_sign_raw"
+signature = "int RSA_sign_raw(RSA *rsa, size_t *out_len, uint8_t *out, size_t max_out, const uint8_t *in, size_t in_len, int padding)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_SIGN) && peios_policy_rsa_padding(padding, PEIOS_OP_SIGN)"
+failure = "0"
+
+[[hook]]
+function = "RSA_verify"
+signature = "int RSA_verify(int hash_nid, const uint8_t *digest, size_t digest_len, const uint8_t *sig, size_t sig_len, RSA *rsa)"
+policy = "peios_policy_rsa_nid(rsa, hash_nid, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "RSA_verify_PKCS1_PSS"
+signature = "int RSA_verify_PKCS1_PSS(const RSA *rsa, const uint8_t *mHash, const EVP_MD *Hash, const uint8_t *EM, int sLen)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_VERIFY) && peios_policy_digest(Hash, PEIOS_OP_DIGEST)"
+failure = "0"
+
+[[hook]]
+function = "RSA_verify_PKCS1_PSS_mgf1"
+signature = "int RSA_verify_PKCS1_PSS_mgf1(const RSA *rsa, const uint8_t *mHash, const EVP_MD *Hash, const EVP_MD *mgf1Hash, const uint8_t *EM, int sLen)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_VERIFY) && peios_policy_digest(Hash, PEIOS_OP_DIGEST)"
+failure = "0"
+
+[[hook]]
+function = "RSA_verify_pss_mgf1"
+signature = "int RSA_verify_pss_mgf1(RSA *rsa, const uint8_t *digest, size_t digest_len, const EVP_MD *md, const EVP_MD *mgf1_md, int salt_len, const uint8_t *sig, size_t sig_len)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_VERIFY) && peios_policy_digest(md, PEIOS_OP_DIGEST)"
+failure = "0"
+
+[[hook]]
+function = "RSA_verify_raw"
+signature = "int RSA_verify_raw(RSA *rsa, size_t *out_len, uint8_t *out, size_t max_out, const uint8_t *in, size_t in_len, int padding)"
+policy = "peios_policy_rsa(rsa, PEIOS_OP_VERIFY) && peios_policy_rsa_padding(padding, PEIOS_OP_VERIFY)"
+failure = "0"
+
+[[hook]]
+function = "CTR_DRBG_new"
+signature = "CTR_DRBG_STATE *CTR_DRBG_new(const uint8_t entropy[48], const uint8_t *personalization, size_t personalization_len)"
+policy = "peios_policy_algorithm(@ctr-drbg.drbg)"
+failure = "NULL"
+
+[[hook]]
+function = "TRUST_TOKEN_CLIENT_new"
+signature = "TRUST_TOKEN_CLIENT *TRUST_TOKEN_CLIENT_new(const TRUST_TOKEN_METHOD *method, size_t max_batchsize)"
+policy = "peios_policy_algorithm(@trust-token.sign)"
+failure = "NULL"
+
+[[hook]]
+function = "TRUST_TOKEN_ISSUER_new"
+signature = "TRUST_TOKEN_ISSUER *TRUST_TOKEN_ISSUER_new(const TRUST_TOKEN_METHOD *method, size_t max_batchsize)"
+policy = "peios_policy_algorithm(@trust-token.sign)"
+failure = "NULL"
+
+[[hook]]
+function = "TRUST_TOKEN_derive_key_from_secret"
+signature = "int TRUST_TOKEN_derive_key_from_secret(const TRUST_TOKEN_METHOD *method, uint8_t *out_priv_key, size_t *out_priv_key_len, size_t max_priv_key_len, uint8_t *out_pub_key, size_t *out_pub_key_len, size_t max_pub_key_len, uint32_t id, const uint8_t *secret, size_t secret_len)"
+policy = "peios_policy_algorithm(@trust-token.keygen)"
+failure = "0"
+
+[[hook]]
+function = "TRUST_TOKEN_generate_key"
+signature = "int TRUST_TOKEN_generate_key(const TRUST_TOKEN_METHOD *method, uint8_t *out_priv_key, size_t *out_priv_key_len, size_t max_priv_key_len, uint8_t *out_pub_key, size_t *out_pub_key_len, size_t max_pub_key_len, uint32_t id)"
+policy = "peios_policy_algorithm(@trust-token.keygen)"
 failure = "0"

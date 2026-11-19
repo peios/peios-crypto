@@ -918,37 +918,337 @@ kind = "fixed"
 # Triple DES encryption, as its cipher is graded.
 operations.encrypt = { grade = "U", fips = false }
 
-# --- RSA key sizes -----------------------------------------------------
-# By SP 800-57 Part 1 Rev. 5, Table 2. FIPS 186-5 approves generating keys
-# of 2048 bits or more.
+# --- Public keys ---------------------------------------------------------
+# By security strength, SP 800-57 Part 1 Rev. 5, Table 2: an RSA or DH
+# modulus of 2048 bits gives 112 bits (C), 3072 gives 128 (B), and 7680
+# gives 192 (A); an elliptic curve gives half its order's size. A
+# signature is graded by its key here and by its digest's `digest` grade.
+# Keys under 1024 bits are export-grade, on the floor, for RSA and DH
+# alike (Logjam, 2015, broke 512-bit Diffie-Hellman in practice).
 
 [[algorithm]]
 id = "rsa-below-1024"
 kind = "rsa"
 bits = [0, 1023]
 operations.keygen = { floor = true }
+operations.sign = { floor = true }
+operations.verify = { floor = true }
+operations.encrypt = { floor = true }
+operations.decrypt = { floor = true }
 
 [[algorithm]]
 id = "rsa-1024"
 kind = "rsa"
 bits = [1024, 2047]
-# 80-bit security.
+# 80-bit security. SP 800-131A Rev. 2 allows verifying with it, as legacy use.
 operations.keygen = { grade = "D", fips = false }
+operations.sign = { grade = "D", fips = false }
+operations.verify = { grade = "D", fips = true }
+operations.encrypt = { grade = "D", fips = false }
+operations.decrypt = { grade = "D", fips = false }
 
 [[algorithm]]
 id = "rsa-2048"
 kind = "rsa"
 bits = [2048, 3071]
 operations.keygen = { grade = "C", fips = true }
+operations.sign = { grade = "C", fips = true }
+operations.verify = { grade = "C", fips = true }
+operations.encrypt = { grade = "C", fips = true }
+operations.decrypt = { grade = "C", fips = true }
 
 [[algorithm]]
 id = "rsa-3072"
 kind = "rsa"
 bits = [3072, 7679]
 operations.keygen = { grade = "B", fips = true }
+operations.sign = { grade = "B", fips = true }
+operations.verify = { grade = "B", fips = true }
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
 
 [[algorithm]]
 id = "rsa-7680"
 kind = "rsa"
 bits = [7680, 2147483647]
 operations.keygen = { grade = "A", fips = true }
+operations.sign = { grade = "A", fips = true }
+operations.verify = { grade = "A", fips = true }
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "dh-below-1024"
+kind = "dh"
+bits = [0, 1023]
+operations.keygen = { floor = true }
+operations.derive = { floor = true }
+
+[[algorithm]]
+id = "dh-1024"
+kind = "dh"
+bits = [1024, 2047]
+# 80-bit security.
+operations.keygen = { grade = "D", fips = false }
+operations.derive = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "dh-2048"
+kind = "dh"
+bits = [2048, 3071]
+operations.keygen = { grade = "C", fips = true }
+operations.derive = { grade = "C", fips = true }
+
+[[algorithm]]
+id = "dh-3072"
+kind = "dh"
+bits = [3072, 7679]
+operations.keygen = { grade = "B", fips = true }
+operations.derive = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "dh-7680"
+kind = "dh"
+bits = [7680, 2147483647]
+operations.keygen = { grade = "A", fips = true }
+operations.derive = { grade = "A", fips = true }
+
+# RSA's paddings, checked beside the key.
+
+[[algorithm]]
+id = "rsa-pkcs1v15-encryption"
+kind = "fixed"
+# PKCS #1 v1.5 encryption: SP 800-131A Rev. 2 disallows it for key
+# transport after 2023, and Bleichenbacher's attack and its successors
+# (Marvin, 2023) keep recurring in implementations.
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "U", fips = false }
+
+[[algorithm]]
+id = "rsa-no-padding"
+kind = "fixed"
+# Raw RSA, which no scheme makes safe on its own.
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "U", fips = false }
+operations.sign = { grade = "U", fips = false }
+operations.verify = { grade = "U", fips = false }
+
+[[algorithm]]
+id = "rsa-x931"
+kind = "fixed"
+# ANSI X9.31 signatures, which FIPS 186-5 withdrew.
+operations.sign = { grade = "U", fips = false }
+operations.verify = { grade = "U", fips = false }
+
+# Elliptic curves, by the NIDs AWS-LC names them with. A custom curve,
+# which has none, is refused.
+
+[[algorithm]]
+id = "ec-p224"
+kind = "ec"
+nid = "NID_secp224r1"
+operations.keygen = { grade = "C", fips = true }
+operations.sign = { grade = "C", fips = true }
+operations.verify = { grade = "C", fips = true }
+operations.derive = { grade = "C", fips = true }
+
+[[algorithm]]
+id = "ec-p256"
+kind = "ec"
+nid = "NID_X9_62_prime256v1"
+operations.keygen = { grade = "B", fips = true }
+operations.sign = { grade = "B", fips = true }
+operations.verify = { grade = "B", fips = true }
+operations.derive = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "ec-p384"
+kind = "ec"
+nid = "NID_secp384r1"
+operations.keygen = { grade = "A", fips = true }
+operations.sign = { grade = "A", fips = true }
+operations.verify = { grade = "A", fips = true }
+operations.derive = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "ec-p521"
+kind = "ec"
+nid = "NID_secp521r1"
+operations.keygen = { grade = "A", fips = true }
+operations.sign = { grade = "A", fips = true }
+operations.verify = { grade = "A", fips = true }
+operations.derive = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "ec-secp256k1"
+kind = "ec"
+nid = "NID_secp256k1"
+# Bitcoin's curve; not NIST-approved.
+operations.keygen = { grade = "B", fips = false }
+operations.sign = { grade = "B", fips = false }
+operations.verify = { grade = "B", fips = false }
+operations.derive = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "ec-brainpoolp224r1"
+kind = "ec"
+nid = "NID_brainpoolP224r1"
+# RFC 5639's Brainpool curves; not NIST-approved.
+operations.keygen = { grade = "C", fips = false }
+operations.sign = { grade = "C", fips = false }
+operations.verify = { grade = "C", fips = false }
+operations.derive = { grade = "C", fips = false }
+
+[[algorithm]]
+id = "ec-brainpoolp256r1"
+kind = "ec"
+nid = "NID_brainpoolP256r1"
+operations.keygen = { grade = "B", fips = false }
+operations.sign = { grade = "B", fips = false }
+operations.verify = { grade = "B", fips = false }
+operations.derive = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "ec-brainpoolp320r1"
+kind = "ec"
+nid = "NID_brainpoolP320r1"
+operations.keygen = { grade = "B", fips = false }
+operations.sign = { grade = "B", fips = false }
+operations.verify = { grade = "B", fips = false }
+operations.derive = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "ec-brainpoolp384r1"
+kind = "ec"
+nid = "NID_brainpoolP384r1"
+operations.keygen = { grade = "A", fips = false }
+operations.sign = { grade = "A", fips = false }
+operations.verify = { grade = "A", fips = false }
+operations.derive = { grade = "A", fips = false }
+
+[[algorithm]]
+id = "ec-brainpoolp512r1"
+kind = "ec"
+nid = "NID_brainpoolP512r1"
+operations.keygen = { grade = "A", fips = false }
+operations.sign = { grade = "A", fips = false }
+operations.verify = { grade = "A", fips = false }
+operations.derive = { grade = "A", fips = false }
+
+[[algorithm]]
+id = "ed25519"
+kind = "fixed"
+# RFC 8032; FIPS 186-5 approves EdDSA. Ed25519ph too.
+operations.keygen = { grade = "B", fips = true }
+operations.sign = { grade = "B", fips = true }
+operations.verify = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "x25519"
+kind = "fixed"
+# RFC 7748. Not FIPS-approved: NIST's 2025 proposal for SP 800-56A
+# declined it.
+operations.keygen = { grade = "B", fips = false }
+operations.derive = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "dsa"
+kind = "fixed"
+# FIPS 186-5 withdrew DSA for generating signatures; verifying is legacy
+# use.
+operations.keygen = { grade = "U", fips = false }
+operations.sign = { grade = "U", fips = false }
+operations.verify = { grade = "D", fips = true }
+
+[[algorithm]]
+id = "ecdsa-fixed-nonce"
+kind = "fixed"
+# ECDSA with a nonce the caller fixes, which AWS-LC offers for testing:
+# reusing a nonce gives away the private key. On the floor.
+operations.sign = { floor = true }
+
+# Post-quantum schemes, by their parameter sets.
+
+[[algorithm]]
+id = "ml-dsa-44"
+kind = "pqdsa"
+nid = "NID_MLDSA44"
+# FIPS 204, security category 2.
+operations.keygen = { grade = "B", fips = true }
+operations.sign = { grade = "B", fips = true }
+operations.verify = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "ml-dsa-65"
+kind = "pqdsa"
+nid = "NID_MLDSA65"
+# Category 3.
+operations.keygen = { grade = "A", fips = true }
+operations.sign = { grade = "A", fips = true }
+operations.verify = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "ml-dsa-87"
+kind = "pqdsa"
+nid = "NID_MLDSA87"
+# Category 5.
+operations.keygen = { grade = "A", fips = true }
+operations.sign = { grade = "A", fips = true }
+operations.verify = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "ml-kem-512"
+kind = "kem"
+nid = "NID_MLKEM512"
+# FIPS 203, security category 1.
+operations.keygen = { grade = "B", fips = true }
+operations.encapsulate = { grade = "B", fips = true }
+operations.decapsulate = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "ml-kem-768"
+kind = "kem"
+nid = "NID_MLKEM768"
+# Category 3.
+operations.keygen = { grade = "A", fips = true }
+operations.encapsulate = { grade = "A", fips = true }
+operations.decapsulate = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "ml-kem-1024"
+kind = "kem"
+nid = "NID_MLKEM1024"
+# Category 5.
+operations.keygen = { grade = "A", fips = true }
+operations.encapsulate = { grade = "A", fips = true }
+operations.decapsulate = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "hrss"
+kind = "fixed"
+# NTRU-HRSS, the KEM in Google's CECPQ2 experiment, which ML-KEM
+# superseded. No known break. Not NIST-approved.
+operations.keygen = { grade = "B", fips = false }
+operations.encapsulate = { grade = "B", fips = false }
+operations.decapsulate = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "spake2"
+kind = "fixed"
+# SPAKE2 over Curve25519, a password-authenticated key exchange. Not
+# NIST-approved.
+operations.derive = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "trust-token"
+kind = "fixed"
+# The Privacy Pass trust-token protocols over P-384, which their method
+# chooses. Not NIST-approved.
+operations.keygen = { grade = "A", fips = false }
+operations.sign = { grade = "A", fips = false }
+
+[[algorithm]]
+id = "ctr-drbg"
+kind = "fixed"
+# SP 800-90A's CTR_DRBG with AES-256, run directly.
+operations.drbg = { grade = "A", fips = true }
