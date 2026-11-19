@@ -604,6 +604,217 @@ operations.decrypt = { grade = "A", fips = false }
 # CMAC with any other cipher, which AWS-LC would key for any 8- or 16-byte
 # block, isn't graded, and is refused.
 
+# --- AEADs --------------------------------------------------------------
+# AWS-LC's EVP_AEAD interface: `encrypt` seals and `decrypt` opens. Graded
+# as their ciphers are, no higher than their MAC, and by their tag length
+# where a short tag is what limits forgery.
+
+[[algorithm]]
+id = "aead-aes-128-gcm"
+kind = "aead"
+getter = "EVP_aead_aes_128_gcm"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aead-aes-128-gcm-randnonce"
+kind = "aead"
+getter = "EVP_aead_aes_128_gcm_randnonce"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aead-aes-128-gcm-tls12"
+kind = "aead"
+getter = "EVP_aead_aes_128_gcm_tls12"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aead-aes-128-gcm-tls13"
+kind = "aead"
+getter = "EVP_aead_aes_128_gcm_tls13"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aead-aes-192-gcm"
+kind = "aead"
+getter = "EVP_aead_aes_192_gcm"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aead-aes-256-gcm"
+kind = "aead"
+getter = "EVP_aead_aes_256_gcm"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aead-aes-256-gcm-randnonce"
+kind = "aead"
+getter = "EVP_aead_aes_256_gcm_randnonce"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aead-aes-256-gcm-tls12"
+kind = "aead"
+getter = "EVP_aead_aes_256_gcm_tls12"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aead-aes-256-gcm-tls13"
+kind = "aead"
+getter = "EVP_aead_aes_256_gcm_tls13"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aead-aes-128-gcm-siv"
+kind = "aead"
+getter = "EVP_aead_aes_128_gcm_siv"
+# RFC 8452; not NIST-approved.
+operations.encrypt = { grade = "B", fips = false }
+operations.decrypt = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "aead-aes-256-gcm-siv"
+kind = "aead"
+getter = "EVP_aead_aes_256_gcm_siv"
+operations.encrypt = { grade = "A", fips = false }
+operations.decrypt = { grade = "A", fips = false }
+
+[[algorithm]]
+id = "aead-aes-128-ccm-bluetooth"
+kind = "aead"
+getter = "EVP_aead_aes_128_ccm_bluetooth"
+# CCM with Bluetooth's 4-byte tag: a forgery succeeds once in 2^32 tries.
+operations.encrypt = { grade = "D", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "aead-aes-128-ccm-bluetooth-8"
+kind = "aead"
+getter = "EVP_aead_aes_128_ccm_bluetooth_8"
+# An 8-byte tag: below 112 bits of forgery resistance.
+operations.encrypt = { grade = "D", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "aead-aes-128-ccm-matter"
+kind = "aead"
+getter = "EVP_aead_aes_128_ccm_matter"
+# CCM with a 16-byte tag, SP 800-38C.
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aead-aes-128-ctr-hmac-sha256"
+kind = "aead"
+getter = "EVP_aead_aes_128_ctr_hmac_sha256"
+operations.encrypt = { grade = "B", fips = false }
+operations.decrypt = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "aead-aes-256-ctr-hmac-sha256"
+kind = "aead"
+getter = "EVP_aead_aes_256_ctr_hmac_sha256"
+# No stronger than its HMAC-SHA-256.
+operations.encrypt = { grade = "B", fips = false }
+operations.decrypt = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "aead-chacha20-poly1305"
+kind = "aead"
+getter = "EVP_aead_chacha20_poly1305"
+operations.encrypt = { grade = "A", fips = false }
+operations.decrypt = { grade = "A", fips = false }
+
+[[algorithm]]
+id = "aead-xchacha20-poly1305"
+kind = "aead"
+getter = "EVP_aead_xchacha20_poly1305"
+operations.encrypt = { grade = "A", fips = false }
+operations.decrypt = { grade = "A", fips = false }
+
+# TLS's CBC record ciphers with HMAC, MAC-then-encrypt, for TLS 1.0 to 1.2:
+# no stronger than their HMAC.
+
+[[algorithm]]
+id = "aead-aes-128-cbc-sha1-tls"
+kind = "aead"
+getter = "EVP_aead_aes_128_cbc_sha1_tls"
+operations.encrypt = { grade = "C", fips = false }
+operations.decrypt = { grade = "C", fips = false }
+
+[[algorithm]]
+id = "aead-aes-128-cbc-sha1-tls-implicit-iv"
+kind = "aead"
+getter = "EVP_aead_aes_128_cbc_sha1_tls_implicit_iv"
+operations.encrypt = { grade = "C", fips = false }
+operations.decrypt = { grade = "C", fips = false }
+
+[[algorithm]]
+id = "aead-aes-128-cbc-sha256-tls"
+kind = "aead"
+getter = "EVP_aead_aes_128_cbc_sha256_tls"
+operations.encrypt = { grade = "B", fips = false }
+operations.decrypt = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "aead-aes-128-cbc-sha256-tls-implicit-iv"
+kind = "aead"
+getter = "EVP_aead_aes_128_cbc_sha256_tls_implicit_iv"
+operations.encrypt = { grade = "B", fips = false }
+operations.decrypt = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "aead-aes-256-cbc-sha1-tls"
+kind = "aead"
+getter = "EVP_aead_aes_256_cbc_sha1_tls"
+operations.encrypt = { grade = "C", fips = false }
+operations.decrypt = { grade = "C", fips = false }
+
+[[algorithm]]
+id = "aead-aes-256-cbc-sha1-tls-implicit-iv"
+kind = "aead"
+getter = "EVP_aead_aes_256_cbc_sha1_tls_implicit_iv"
+operations.encrypt = { grade = "C", fips = false }
+operations.decrypt = { grade = "C", fips = false }
+
+[[algorithm]]
+id = "aead-aes-256-cbc-sha384-tls"
+kind = "aead"
+getter = "EVP_aead_aes_256_cbc_sha384_tls"
+operations.encrypt = { grade = "A", fips = false }
+operations.decrypt = { grade = "A", fips = false }
+
+[[algorithm]]
+id = "aead-des-ede3-cbc-sha1-tls"
+kind = "aead"
+getter = "EVP_aead_des_ede3_cbc_sha1_tls"
+# Triple DES, as its cipher is graded.
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "aead-des-ede3-cbc-sha1-tls-implicit-iv"
+kind = "aead"
+getter = "EVP_aead_des_ede3_cbc_sha1_tls_implicit_iv"
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "aead-null-sha1-tls"
+kind = "aead"
+getter = "EVP_aead_null_sha1_tls"
+# Encrypts nothing: on the floor, as NULL ciphers are.
+operations.encrypt = { floor = true }
+operations.decrypt = { floor = true }
+
 # --- MACs a function fixes by name --------------------------------------
 
 [[algorithm]]

@@ -100,28 +100,12 @@ functions = [
 ]
 
 [[group]]
-title = "Ciphers: starting, keying and one-shot"
+title = "Ciphers: changing a context's key length or parameters"
 class = "pending"
-reason = "Chooses a cipher and keys it, or encrypts or decrypts in one call."
+reason = "Shortens a variable-length cipher's key, or sets its parameters, after the cipher was checked. Governing them needs a grade for shortened keys, which the grading specification has still to set."
 functions = [
-    "AES_set_decrypt_key",
-    "AES_set_encrypt_key",
-    "BF_set_key",
-    "CRYPTO_chacha_20",
-    "DES_key_sched",
-    "DES_set_key",
-    "DES_set_key_unchecked",
-    "DES_set_odd_parity",
-    "EVP_AEAD_CTX_init",
-    "EVP_AEAD_CTX_init_with_direction",
-    "EVP_AEAD_CTX_new",
     "EVP_CIPHER_CTX_ctrl",
     "EVP_CIPHER_CTX_set_key_length",
-    "EVP_CipherInit",
-    "EVP_CipherInit_ex",
-    "EVP_DecryptInit",
-    "EVP_EncryptInit",
-    "RC4_set_key",
 ]
 
 [[group]]
@@ -1639,6 +1623,7 @@ title = "des.h: contexts, keys and descriptions"
 class = "forward"
 reason = "Creates, frees, copies, loads, encodes or queries contexts and keys, returns an algorithm's description, or continues an operation whose algorithm was chosen when it started."
 functions = [
+    "DES_set_odd_parity",
     "DES_ecb3_encrypt",
     "DES_ecb_encrypt",
     "DES_ede2_cbc_encrypt",
@@ -3823,13 +3808,13 @@ failure = "0"
 [[hook]]
 function = "EVP_EncryptInit_ex"
 signature = "int EVP_EncryptInit_ex(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher, ENGINE *impl, const uint8_t *key, const uint8_t *iv)"
-policy = "peios_policy_cipher(cipher, PEIOS_OP_ENCRYPT)"
+policy = "peios_policy_cipher_init(ctx, cipher, 1)"
 failure = "0"
 
 [[hook]]
 function = "EVP_DecryptInit_ex"
 signature = "int EVP_DecryptInit_ex(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher, ENGINE *impl, const uint8_t *key, const uint8_t *iv)"
-policy = "peios_policy_cipher(cipher, PEIOS_OP_DECRYPT)"
+policy = "peios_policy_cipher_init(ctx, cipher, 0)"
 failure = "0"
 
 [[hook]]
@@ -4111,4 +4096,101 @@ failure = "abort"
 function = "SIPHASH_24"
 signature = "uint64_t SIPHASH_24(const uint64_t key[2], const uint8_t *input, size_t input_len)"
 policy = "peios_policy_algorithm(@siphash-2-4.mac)"
+failure = "abort"
+
+# Ciphers. A cipher context is checked in the direction it's set to, and
+# again if it's turned to the other. EVP_AEAD_CTX_init and _new don't say
+# which direction a context is for, so are checked for sealing, the
+# stricter. The low-level keying functions can't report failure, or have
+# callers that never check: a refusal ends the process. A DES key
+# schedule may serve single or Triple DES, so is checked as single DES.
+
+[[hook]]
+function = "EVP_CipherInit_ex"
+signature = "int EVP_CipherInit_ex(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher, ENGINE *engine, const uint8_t *key, const uint8_t *iv, int enc)"
+policy = "peios_policy_cipher_init(ctx, cipher, enc)"
+failure = "0"
+
+[[hook]]
+function = "EVP_CipherInit"
+signature = "int EVP_CipherInit(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher, const uint8_t *key, const uint8_t *iv, int enc)"
+policy = "peios_policy_cipher_init(ctx, cipher, enc)"
+failure = "0"
+
+[[hook]]
+function = "EVP_EncryptInit"
+signature = "int EVP_EncryptInit(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher, const uint8_t *key, const uint8_t *iv)"
+policy = "peios_policy_cipher_init(ctx, cipher, 1)"
+failure = "0"
+
+[[hook]]
+function = "EVP_DecryptInit"
+signature = "int EVP_DecryptInit(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher, const uint8_t *key, const uint8_t *iv)"
+policy = "peios_policy_cipher_init(ctx, cipher, 0)"
+failure = "0"
+
+[[hook]]
+function = "EVP_AEAD_CTX_init"
+signature = "int EVP_AEAD_CTX_init(EVP_AEAD_CTX *ctx, const EVP_AEAD *aead, const uint8_t *key, size_t key_len, size_t tag_len, ENGINE *impl)"
+policy = "peios_policy_aead(aead, PEIOS_OP_ENCRYPT)"
+failure = "0"
+
+[[hook]]
+function = "EVP_AEAD_CTX_init_with_direction"
+signature = "int EVP_AEAD_CTX_init_with_direction(EVP_AEAD_CTX *ctx, const EVP_AEAD *aead, const uint8_t *key, size_t key_len, size_t tag_len, enum evp_aead_direction_t dir)"
+policy = "peios_policy_aead(aead, dir == evp_aead_seal ? PEIOS_OP_ENCRYPT : PEIOS_OP_DECRYPT)"
+failure = "0"
+
+[[hook]]
+function = "EVP_AEAD_CTX_new"
+signature = "EVP_AEAD_CTX *EVP_AEAD_CTX_new(const EVP_AEAD *aead, const uint8_t *key, size_t key_len, size_t tag_len)"
+policy = "peios_policy_aead(aead, PEIOS_OP_ENCRYPT)"
+failure = "NULL"
+
+[[hook]]
+function = "AES_set_encrypt_key"
+signature = "int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey)"
+policy = "peios_policy_algorithm(bits == 128 ? @aes-128-ecb.encrypt : bits == 192 ? @aes-192-ecb.encrypt : @aes-256-ecb.encrypt)"
+failure = "abort"
+
+[[hook]]
+function = "AES_set_decrypt_key"
+signature = "int AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey)"
+policy = "peios_policy_algorithm(bits == 128 ? @aes-128-ecb.decrypt : bits == 192 ? @aes-192-ecb.decrypt : @aes-256-ecb.decrypt)"
+failure = "abort"
+
+[[hook]]
+function = "DES_set_key"
+signature = "int DES_set_key(const DES_cblock *key, DES_key_schedule *schedule)"
+policy = "peios_policy_algorithm(@des-ecb.encrypt)"
+failure = "abort"
+
+[[hook]]
+function = "DES_key_sched"
+signature = "int DES_key_sched(const DES_cblock *key, DES_key_schedule *schedule)"
+policy = "peios_policy_algorithm(@des-ecb.encrypt)"
+failure = "abort"
+
+[[hook]]
+function = "DES_set_key_unchecked"
+signature = "void DES_set_key_unchecked(const DES_cblock *key, DES_key_schedule *schedule)"
+policy = "peios_policy_algorithm(@des-ecb.encrypt)"
+failure = "abort"
+
+[[hook]]
+function = "RC4_set_key"
+signature = "void RC4_set_key(RC4_KEY *rc4key, unsigned len, const uint8_t *key)"
+policy = "peios_policy_algorithm(@rc4.encrypt)"
+failure = "abort"
+
+[[hook]]
+function = "BF_set_key"
+signature = "void BF_set_key(BF_KEY *key, size_t len, const uint8_t *data)"
+policy = "peios_policy_algorithm(@bf-ecb.encrypt)"
+failure = "abort"
+
+[[hook]]
+function = "CRYPTO_chacha_20"
+signature = "void CRYPTO_chacha_20(uint8_t *out, const uint8_t *in, size_t in_len, const uint8_t key[32], const uint8_t nonce[12], uint32_t counter)"
+policy = "peios_policy_algorithm(@chacha20.encrypt)"
 failure = "abort"

@@ -7,6 +7,8 @@
 
 #include <string.h>
 
+#include <openssl/aead.h>
+#include <openssl/aes.h>
 #include <openssl/bn.h>
 #include <openssl/cipher.h>
 #include <openssl/cmac.h>
@@ -15,6 +17,7 @@
 #include <openssl/hmac.h>
 #include <openssl/md5.h>
 #include <openssl/poly1305.h>
+#include <openssl/rc4.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 #include <openssl/siphash.h>
@@ -120,6 +123,39 @@ int main(void) {
     CRYPTO_poly1305_finish(&poly, out);
     static const uint64_t siphash_key[2] = {1, 2};
     (void)SIPHASH_24(siphash_key, (const uint8_t *)"abc", 3);
+
+    // A cipher context turned to the other direction is checked again, and
+    // allowed here.
+    EVP_CIPHER_CTX *cctx = EVP_CIPHER_CTX_new();
+    check(EVP_DecryptInit_ex(cctx, EVP_aes_128_cbc(), NULL, key, key) &&
+              EVP_EncryptInit_ex(cctx, NULL, NULL, key, key) &&
+              EVP_CipherInit_ex(cctx, NULL, NULL, NULL, NULL, -1),
+          "re-initialising an AES-128-CBC context was refused");
+    EVP_CIPHER_CTX_free(cctx);
+
+    // AEADs: the TLS NULL-cipher AEAD is on the floor.
+    EVP_AEAD_CTX aead;
+    check(EVP_AEAD_CTX_init(&aead, EVP_aead_aes_128_gcm(), key, 16, 16, NULL),
+          "AES-128-GCM was refused");
+    EVP_AEAD_CTX_cleanup(&aead);
+    check(EVP_AEAD_CTX_init_with_direction(&aead, EVP_aead_chacha20_poly1305(), key, 32, 16,
+                                           evp_aead_open),
+          "ChaCha20-Poly1305 opening was refused");
+    EVP_AEAD_CTX_cleanup(&aead);
+    check(EVP_AEAD_CTX_new(EVP_aead_null_sha1_tls(), key, 20, 20) == NULL &&
+              refused_with(REFUSED_BY_POLICY),
+          "the NULL-cipher TLS AEAD wasn't refused by EVP_AEAD_CTX_new");
+    check(!EVP_AEAD_CTX_init_with_direction(&aead, EVP_aead_null_sha1_tls(), key, 20, 20,
+                                            evp_aead_seal) &&
+              refused_with(REFUSED_BY_POLICY),
+          "the NULL-cipher TLS AEAD wasn't refused for sealing");
+
+    // The low-level keying functions still key.
+    AES_KEY aes;
+    check(AES_set_encrypt_key(key, 128, &aes) == 0, "AES_set_encrypt_key failed");
+    check(AES_set_decrypt_key(key, 256, &aes) == 0, "AES_set_decrypt_key failed");
+    RC4_KEY rc4;
+    RC4_set_key(&rc4, 16, key);
 
     // Every digest and cipher AWS-LC looks up by NID is graded: none is
     // refused as ungraded.

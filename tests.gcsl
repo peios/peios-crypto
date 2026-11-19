@@ -95,6 +95,13 @@ def test pcrypto_exports(
 # - `RSATest.GenerateSmallKey`, which expects AWS-LC's own error for a
 #   255-bit RSA key. The key is still refused, but by Peios's policy
 #   floor, before AWS-LC sees it, so the error is Peios's.
+# - `EvpAeadCtxSerdeTest.ID` and the `EvpAeadCtxSerdeTest` cases for
+#   `EVP_aead_null_sha1_tls`, which key the TLS NULL-cipher AEAD, on the
+#   floor.
+# - `CipherTest.CopyErrorPathReleasesCipherData`, which keys a cipher it
+#   defines itself through AWS-LC's internal headers. The runtime refuses
+#   any cipher it hasn't graded; AWS-LC's API gives programs no way to
+#   define one.
 def test awslc_crypto_test(
     testing: Dir = build pcrypto_testing(),
     reference: Dir = build awslc_reference(),
@@ -103,7 +110,7 @@ def test awslc_crypto_test(
 ) {
     let ran = checked(
         "{as_awslc("{REFERENCE}/tests/crypto_test")}; cd /tmp; {REFERENCE}/tests/crypto_test \
-         --gtest_filter=-AddrFamily/BIODgramTest.SocketDatagramSetConnected/1:RSATest.GenerateSmallKey",
+         --gtest_filter=-AddrFamily/BIODgramTest.SocketDatagramSetConnected/1:RSATest.GenerateSmallKey:EvpAeadCtxSerdeTest.ID:EvpAeadCtxSerdeTests/EvpAeadCtxSerdeTest.*/EVP_aead_null_sha1_tls:CipherTest.CopyErrorPathReleasesCipherData",
         [{at = TESTING; place = testing}, {at = "{REFERENCE}/tests"; place = reference.dir("tests")}],
         c = c,
         env = env,

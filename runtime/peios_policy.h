@@ -8,11 +8,14 @@
 
 struct env_md_st;
 struct evp_cipher_st;
+struct evp_cipher_ctx_st;
+struct evp_aead_st;
 
 /* What an algorithms.toml entry grades. */
 enum peios_kind {
     PEIOS_KIND_DIGEST,
     PEIOS_KIND_CIPHER,
+    PEIOS_KIND_AEAD,
     PEIOS_KIND_RSA,
     /* An algorithm a function fixes by its name, MD5's or Poly1305's, which
        a hook names by its entry. */
@@ -48,6 +51,7 @@ struct peios_algorithm {
     enum peios_kind kind;
     const struct env_md_st *(*md)(void);
     const struct evp_cipher_st *(*cipher)(void);
+    const struct evp_aead_st *(*aead)(void);
     int min_bits;
     int max_bits;
     enum peios_operation op;
@@ -86,7 +90,15 @@ enum peios_decision peios_policy_decision(const struct peios_algorithm *algorith
    grade is refused. */
 int peios_policy_digest(const struct env_md_st *md, enum peios_operation op);
 int peios_policy_cipher(const struct evp_cipher_st *cipher, enum peios_operation op);
+int peios_policy_aead(const struct evp_aead_st *aead, enum peios_operation op);
 int peios_policy_rsa_keygen(int bits);
+
+/* The check for (re)initialising a cipher context: `cipher`, or the
+   context's own if it's NULL, in the direction `enc` sets, or the
+   context's own if it's -1, as `EVP_CipherInit_ex` reads them. A context
+   checked for one direction can't be turned to the other unchecked. */
+int peios_policy_cipher_init(const struct evp_cipher_ctx_st *ctx,
+                             const struct evp_cipher_st *cipher, int enc);
 
 /* The check for a function whose name fixes its algorithm: a hook passes
    the entry, which the generator finds by its id. */

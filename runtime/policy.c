@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <openssl/aead.h>
 #include <openssl/cipher.h>
 #include <openssl/digest.h>
 #include <openssl/err.h>
@@ -58,6 +59,32 @@ int peios_policy_cipher(const EVP_CIPHER *cipher, enum peios_operation op) {
     for (unsigned i = 0; i < peios_algorithm_count; i++) {
         const struct peios_algorithm *a = &peios_algorithms[i];
         if (a->kind == PEIOS_KIND_CIPHER && a->op == op && a->cipher() == cipher) {
+            return decide(a);
+        }
+    }
+    return decide(NULL);
+}
+
+int peios_policy_cipher_init(const EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher, int enc) {
+    if (enc == -1) {
+        if (cipher == NULL) {
+            return 1;
+        }
+        enc = EVP_CIPHER_CTX_encrypting(ctx);
+    }
+    if (cipher == NULL) {
+        cipher = EVP_CIPHER_CTX_cipher(ctx);
+    }
+    return peios_policy_cipher(cipher, enc ? PEIOS_OP_ENCRYPT : PEIOS_OP_DECRYPT);
+}
+
+int peios_policy_aead(const EVP_AEAD *aead, enum peios_operation op) {
+    if (aead == NULL) {
+        return 1;
+    }
+    for (unsigned i = 0; i < peios_algorithm_count; i++) {
+        const struct peios_algorithm *a = &peios_algorithms[i];
+        if (a->kind == PEIOS_KIND_AEAD && a->op == op && a->aead() == aead) {
             return decide(a);
         }
     }
