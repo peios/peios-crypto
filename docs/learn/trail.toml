@@ -1,0 +1,21 @@
+sitename = "Peios Learn"
+title = "peios-crypto"
+description = "The Peios cryptography libraries: libpcrypto and libpssl."
+footer = "Peios Learn"
+featured = ["peios"]
+
+[lint]
+rules = [
+  "spelling", "em-dash", "double-hyphen", "curly-quotes",
+  "invisible-characters", "exclamation", "ampersand", "double-space",
+  "title-case", "heading-case", "heading-punctuation", "heading-levels",
+  "code-language", "shell-prompt", "line-length", "hex-case", "serial-comma",
+]
+line_length = 78
+proper_nouns = [
+  "Peios", "OpenSSL", "AWS-LC", "libpcrypto", "libpssl", "C", "C++", "Rust",
+  "Cargo", "TLS", "API", "SHA-256",
+]
+
+[lint.spelling]
+banned-words = ["banned-words.txt"]
