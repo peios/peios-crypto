@@ -28,7 +28,8 @@ see [Using Cryptography from Rust](~peios/cryptography/using-cryptography-from-r
 - Install a C compiler and pkg-config.
 - Expect Peios crypto policy to apply to these libraries' callers. The
   current libraries enforce only its floor, which no machine can loosen:
-  they refuse the null cipher and RSA keys under 1024 bits when a program
+  they refuse the null cipher, the 40-bit export-grade RC2 cipher and RSA
+  keys under 1024 bits when a program
   starts a digest, an HMAC or a cipher, or generates an RSA key, through
   `EVP_DigestInit_ex`, `HMAC_Init_ex`, `EVP_EncryptInit_ex`,
   `EVP_DecryptInit_ex` or `RSA_generate_key_ex`. Other calls go straight

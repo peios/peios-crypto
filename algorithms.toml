@@ -26,7 +26,8 @@
 # --- Digests ----------------------------------------------------------
 # `digest` grades collision resistance, half the output for an unbroken
 # hash; `hmac` grades the MAC, whose strength doesn't rest on collision
-# resistance.
+# resistance. A digest with no `hmac` grade is one AWS-LC won't key HMAC
+# with; the runtime refuses it as ungraded before AWS-LC would.
 
 [[algorithm]]
 id = "md4"
@@ -129,7 +130,8 @@ operations.hmac = { grade = "A", fips = true }
 id = "shake128"
 kind = "digest"
 getter = "EVP_shake128"
-# FIPS 202: 128-bit security. HMAC isn't defined over an XOF.
+# FIPS 202: 128-bit security. HMAC isn't defined over an XOF, and AWS-LC
+# refuses it.
 operations.digest = { grade = "B", fips = true }
 
 [[algorithm]]
@@ -151,6 +153,7 @@ id = "keccak256"
 kind = "digest"
 getter = "EVP_keccak256"
 # Keccak with the original padding, as Ethereum uses it, not SHA3-256.
+# AWS-LC won't key HMAC with it.
 operations.digest = { grade = "B", fips = false }
 
 [[algorithm]]
@@ -166,14 +169,14 @@ id = "md5-sha1"
 kind = "digest"
 getter = "EVP_md5_sha1"
 # MD5 and SHA-1 side by side, for TLS 1.0 and 1.1 handshakes, which RFC
-# 8996 deprecates.
+# 8996 deprecates. AWS-LC won't key HMAC with it.
 operations.digest = { grade = "D", fips = false }
 
 [[algorithm]]
 id = "md-null"
 kind = "digest"
 getter = "EVP_md_null"
-# Hashes nothing.
+# Hashes nothing. AWS-LC won't key HMAC with it.
 operations.digest = { grade = "U", fips = false }
 
 # --- Ciphers -----------------------------------------------------------
