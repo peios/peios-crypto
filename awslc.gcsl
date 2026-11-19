@@ -1,0 +1,106 @@
+# AWS-LC, the implementation underneath libpcrypto and libpssl: built as the
+# shared libraries `libcrypto-awslc.so.1` and `libssl-awslc.so.1`, AWS-LC's
+# own names for installing beside another libcrypto, with every exported
+# symbol renamed with the prefix `peios_awslc_`. Nothing links them but
+# Peios's wrappers, and nothing can reach their functions by OpenSSL's
+# names, so every call passes the wrappers' policy.
+#
+# Prefixing takes two builds, as AWS-LC's BUILDING.md describes. The first,
+# unprefixed and static, gives the list of symbols, which AWS-LC's own
+# `util/read_symbols.go` reads from its archives; the second renames them.
+# Both are compiled with Intel CET's landing pads and shadow-stack marking.
+import toolchain
+import Toolchain from toolchain
+import GoToolchain from "github.com/gcslib/go"
+
+# AWS-LC 5.15.0, by the commit its tag names: a commit, unlike a tag or a
+# generated archive, can't change.
+let AWSLC_COMMIT = "4378134b6206a0a0fa62f31367d0729ca0780e4c"
+
+let PREFIX = "peios_awslc"
+
+# Where AWS-LC is installed, and where its builds have Go and CMake.
+let AWSLC = "/opt/awslc"
+
+let CMAKE = cmake_path()
+
+let GO = "/opt/go"
+
+let SYMBOLS_OUT = "/opt/awslc-symbols"
+
+# The configuration both builds share: AWS-LC's libraries alone, without its
+# tests, its `bssl` tool or Perl, which only regenerates the assembly AWS-LC
+# ships generated; and without rewriting its own sources.
+let CONFIGURE = "-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DBUILD_TOOL=OFF \
+                 -DDISABLE_PERL=ON -DENABLE_SOURCE_MODIFICATION=OFF \
+                 -DCMAKE_C_COMPILER=\"$CC\" -DCMAKE_CXX_COMPILER=\"$CXX\" \
+                 -DCMAKE_AR=\"$AR\" -DCMAKE_RANLIB=\"$RANLIB\" \
+                 -DCMAKE_C_FLAGS=-fcf-protection=full -DCMAKE_CXX_FLAGS=-fcf-protection=full \
+                 -DCMAKE_ASM_FLAGS=-fcf-protection=full"
+
+# Go's caches in the build's own temporary directory, and nothing fetched:
+# AWS-LC's Go programs use only Go's standard library.
+let GO_ENV = "export PATH={GO}/bin:$PATH GOCACHE=/tmp/go-cache GOPATH=/tmp/go \
+              GOFLAGS=-buildvcs=false GOTOOLCHAIN=local GOPROXY=off GOENV=off"
+
+def build awslc_source() {
+    = fetch_git("https://github.com/aws/aws-lc.git", AWSLC_COMMIT)
+}
+
+# The symbols AWS-LC's static libraries define, one per line: the names the
+# second build renames.
+def build awslc_symbols(go: GoToolchain = toolchain.get(Toolchain::Go)) {
+    = installed(
+        build awslc_source(),
+        "{GO_ENV}; {CMAKE}/bin/cmake -S . -B build {CONFIGURE} -DBUILD_SHARED_LIBS=OFF \
+         -DDISABLE_GO=ON && {CMAKE}/bin/cmake --build build -j8 \
+         && mkdir -p {SYMBOLS_OUT} && go run ./util/read_symbols.go -out {SYMBOLS_OUT}/symbols.txt \
+         build/crypto/libcrypto.a build/ssl/libssl.a",
+        SYMBOLS_OUT,
+        given = [{at = CMAKE; place = build cmake()}, {at = GO; place = go.root}],
+    ).file("symbols.txt")
+}
+
+# AWS-LC's shared libraries and headers, every symbol `awslc_symbols` lists
+# prefixed. Its headers map OpenSSL's names to the prefixed ones, so code
+# compiled against them reaches AWS-LC only by the prefixed names.
+#
+# The build fails unless every object it compiles carries the IBT and SHSTK
+# properties. The libraries themselves can't show them here: Bootlin's
+# glibc start files carry none, so its linker drops them from everything it
+# links. Linked by Peios's own GCC, whose glibc has them, they keep them,
+# and pkgs checks that. AWS-LC's `libcrypto.so` and `libssl.so` links and
+# its `libcrypto`, `libssl` and `openssl` pkg-config files, for linking it
+# as OpenSSL, are removed: only the wrappers link it.
+def build awslc(go: GoToolchain = toolchain.get(Toolchain::Go)) {
+    = installed(
+        build awslc_source(),
+        "{GO_ENV}; {CMAKE}/bin/cmake -S . -B build {CONFIGURE} -DBUILD_SHARED_LIBS=ON \
+         -DENABLE_PRE_SONAME_BUILD=OFF -DGO_EXECUTABLE={GO}/bin/go \
+         -DBORINGSSL_PREFIX={PREFIX} -DBORINGSSL_PREFIX_SYMBOLS=/work/symbols.txt \
+         -DCMAKE_INSTALL_PREFIX={AWSLC} -DCMAKE_INSTALL_LIBDIR=lib \
+         && {CMAKE}/bin/cmake --build build -j8; \
+         [ -n \"$(find build -name '*.o' | head -1)\" ] || {{ echo 'no objects to check'; exit 1; }}; \
+         unmarked=$(find build -name '*.o' | while read -r object; do \
+         \"$READELF\" -n \"$object\" | grep -q 'IBT, SHSTK' || echo \"$object\"; done); \
+         if [ -n \"$unmarked\" ]; then echo 'objects without IBT and SHSTK:'; \
+         echo \"$unmarked\" | head -20; exit 1; fi; \
+         {CMAKE}/bin/cmake --install build; rm {AWSLC}/lib/libcrypto.so {AWSLC}/lib/libssl.so \
+         {AWSLC}/lib/pkgconfig/libcrypto.pc {AWSLC}/lib/pkgconfig/libssl.pc \
+         {AWSLC}/lib/pkgconfig/openssl.pc",
+        AWSLC,
+        given = [
+            {at = CMAKE; place = build cmake()},
+            {at = GO; place = go.root},
+            {at = "/work/symbols.txt"; place = build awslc_symbols()},
+        ],
+    )
+}
+
+def awslc_path() -> String {
+    = AWSLC
+}
+
+def awslc_symbol_prefix() -> String {
+    = PREFIX
+}

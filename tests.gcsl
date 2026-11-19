@@ -1,0 +1,76 @@
+# peios-crypto's tests. A test's own code runs in a hermetic step of its own,
+# so what it builds, and its toolchains, are in its parameters' defaults.
+import fs
+import toolchain
+import Toolchain from toolchain
+import BuildEnv from "github.com/gcslib/buildenv"
+import base from "github.com/gcslib/buildenv"
+import bin_path from "github.com/gcslib/buildenv"
+
+let TOOL_CC = "/opt/cc"
+
+let AWSLC = awslc_path()
+
+let PREFIX = awslc_symbol_prefix()
+
+# AWS-LC's libraries keep their own sonames, can't be linked as `-lcrypto`
+# or `-lssl` or found as OpenSSL by pkg-config, and export nothing by an OpenSSL name, so that nothing can
+# bypass the wrappers by linking them. Their objects' CET properties are
+# checked as they're built.
+#
+# libssl's C++ internals are prefixed by namespace, `bssl::peios_awslc`,
+# not by name. One C++ function, `tls_print_all_supported_cipher_suites`,
+# is outside it; OpenSSL has no such name, so it's allowed by name, and any
+# other is a failure.
+def test awslc_exports(
+    awslc: Dir = build awslc(),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let ran = checked(
+        "cd {AWSLC}/lib; for name in libcrypto.so libssl.so pkgconfig/libcrypto.pc \
+         pkgconfig/libssl.pc pkgconfig/openssl.pc; do \
+         if [ -e $name ]; then echo \"$name would link AWS-LC as OpenSSL\"; exit 1; fi; done; \
+         for lib in libcrypto-awslc libssl-awslc; do \
+         real=$(readlink -f $lib.so); \
+         \"$READELF\" -d \"$real\" | grep -q \"(SONAME).*\\[$lib.so.1\\]\" \
+         || {{ echo \"$lib: soname is not $lib.so.1\"; exit 1; }}; \
+         leaked=$(\"$NM\" -D --defined-only \"$real\" | awk 'NF == 3 {{print $3}}' \
+         | grep -v -e '^{PREFIX}_' -e '^_ZN4bssl[0-9]*{PREFIX}' \
+         -e '^_Z37tls_print_all_supported_cipher_suitesb$' || true); \
+         if [ -n \"$leaked\" ]; then echo \"$lib exports unprefixed symbols:\"; \
+         echo \"$leaked\" | head -20; exit 1; fi; done",
+        [{at = AWSLC; place = awslc}],
+        c = c,
+        env = env,
+    )
+}
+
+# Runs `script` with the C toolchain's tools, as `installed` gives them, and
+# `given` placed.
+#[hermetic]
+fn checked(
+    script: String,
+    given: List<{at: String, place: Dir | File}>,
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) -> {} {
+    let at = fn(tool: File) -> String { "{TOOL_CC}/{tool.path.strip_prefix(c.root.path).strip_prefix("/")}" }
+    let binutils = at(c.ar).strip_suffix("ar")
+    let placed: List<{at: String, place: Dir | File | FileSet}> = [
+        ...base(env, c.runtime),
+        {at = TOOL_CC; place = c.root},
+        ...(for each in given { = {at = each.at; place = each.place} }),
+    ]
+    let box = fs.compose(placed).sandbox(
+        cwd = "/",
+        env = {
+            NM = "{binutils}nm"
+            READELF = "{binutils}readelf"
+            PATH = bin_path(c.runtime)
+            HOME = "/tmp"
+        },
+    )
+    let ran = box.exec("/bin/sh", "-c", "set -e; {script}")
+    = {}
+}

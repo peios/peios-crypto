@@ -1,0 +1,98 @@
+# What peios-crypto's build takes besides the C toolchain and Go, built from
+# its pinned release with the registered C toolchain and the buildenv
+# library's busybox and make, so that the build reads nothing of the
+# machine: CMake, which AWS-LC builds with. Kitware's SHA-256 for the
+# release archive was checked when it was pinned.
+#
+# Each tool is installed where it expects to be, under `/opt`; a build that
+# runs one places it there.
+import fs
+import unpack from archive
+import toolchain
+import Toolchain from toolchain
+import BuildEnv from "github.com/gcslib/buildenv"
+import base from "github.com/gcslib/buildenv"
+import bin_path from "github.com/gcslib/buildenv"
+
+# Where a build has the C toolchain and the source.
+let TOOL_CC = "/opt/cc"
+
+let TOOL_SRC_IN = "/work/src-in"
+
+let TOOL_SRC = "/work/src"
+
+# Where CMake is installed, and placed for what runs it.
+let CMAKE = "/opt/cmake"
+
+def cmake_path() -> String {
+    = CMAKE
+}
+
+# CMake 4.4.3, bootstrapped with the C and C++ compilers alone: no system
+# libraries, no OpenSSL and none of its own tests.
+def build cmake() {
+    let src = unpack(fetch(
+        "https://github.com/Kitware/CMake/releases/download/v4.4.3/cmake-4.4.3.tar.gz",
+        sha256 = "c46400618b4f1f2b43507f24fb22f3ae830c3416cf23b776e16e1d413aa892f0",
+    ))
+    = installed(
+        src.dir("cmake-4.4.3"),
+        "./bootstrap --prefix={CMAKE} --parallel=8 --no-system-libs \
+         -- -DCMAKE_USE_OPENSSL=OFF -DBUILD_TESTING=OFF \
+         && make -j8 && make install",
+        CMAKE,
+    )
+}
+
+# What `script` installs at `out`, run in a copy of the source `src` given
+# one time, with the C toolchain's tools and `given` placed besides. Each
+# static archive it installs is made deterministic with `objcopy -D`, its
+# members' times, owners and modes zeroed, and keeps its own mode. This is
+# openssh's helper of the same name, with the C++ compiler added for
+# CMake and AWS-LC.
+#[hermetic]
+def installed(
+    src: Dir,
+    script: String,
+    out: String,
+    given: List<{at: String, place: Dir | File}> = [],
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) -> Dir {
+    let at = fn(tool: File) -> String { "{TOOL_CC}/{tool.path.strip_prefix(c.root.path).strip_prefix("/")}" }
+    # binutils' other tools, and the C++ compiler, beside `ar` and `gcc`
+    # by the same prefix.
+    let binutils = at(c.ar).strip_suffix("ar")
+    let placed: List<{at: String, place: Dir | File | FileSet}> = [
+        ...base(env, c.runtime),
+        {at = TOOL_CC; place = c.root},
+        {at = TOOL_SRC_IN; place = src},
+        ...(for each in given { = {at = each.at; place = each.place} }),
+    ]
+    let box = fs.compose(placed).sandbox(
+        cwd = "/work",
+        env = {
+            CC = at(c.cc)
+            CXX = "{at(c.cc).strip_suffix("gcc")}g++"
+            AR = at(c.ar)
+            LD = at(c.ld)
+            NM = "{binutils}nm"
+            RANLIB = "{binutils}ranlib"
+            READELF = "{binutils}readelf"
+            PATH = bin_path(c.runtime)
+            HOME = "/tmp"
+            TMPDIR = "/tmp"
+            SOURCE_DATE_EPOCH = "946684800"
+        },
+    )
+    let ran = box.exec(
+        "/bin/sh",
+        "-c",
+        "set -e; mkdir -p /tmp; cp -R {TOOL_SRC_IN} {TOOL_SRC}; chmod -R u+w {TOOL_SRC}; \
+         find {TOOL_SRC} -exec touch -h -d '2000-01-01 00:00:00' {{}} +; cd {TOOL_SRC}; {script}; \
+         find {out} -type f -name '*.a' | while read -r archive; do \
+         mode=$(stat -c %a \"$archive\"); chmod u+w \"$archive\"; \
+         \"${{AR%ar}}objcopy\" -D \"$archive\"; chmod \"$mode\" \"$archive\"; done",
+    )
+    = box.dir(out)
+}
