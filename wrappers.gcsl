@@ -19,6 +19,7 @@
 # properties.
 import toolchain
 import Toolchain from toolchain
+import PythonToolchain from "github.com/gcslib/python"
 
 let PCRYPTO = "/opt/pcrypto"
 
@@ -26,9 +27,20 @@ let WRAPPERS = "/opt/wrappers"
 
 let REFERENCE = awslc_reference_path()
 
-let GENERATOR = "/work/generate-forwarders.sh"
+let GENERATOR = "/work/generate.py"
+
+let BINDINGS_TOML = "/work/bindings.toml"
+
+let ALGORITHMS_TOML = "/work/algorithms.toml"
+
+let RUNTIME = "/work/runtime"
+
+let PYTHON = "/opt/python"
 
 let BINDINGS = "/work/aws_lc_bindings.rs"
+
+# How the generated hooks and the policy runtime are compiled.
+let OWN_CFLAGS = "-O2 -fPIC -fcf-protection=full -Wall -Wextra -Werror"
 
 # The link both libraries share. Each binds its own calls to its own
 # functions, so that a program can't take over AWS-LC's internal calls by
@@ -53,36 +65,49 @@ def build pcrypto_testing() {
     = build wrappers().dir("testing")
 }
 
+# What the generator read, for the tests that check it refuses what it
+# should: the public headers, preprocessed, and the archives' symbols.
+def build generator_inputs() {
+    = build wrappers().dir("inputs")
+}
+
 # The installed tree in `dist`, and the testing libraries in `testing/lib`,
-# linked from the same objects. The identifiers AWS-LC's public headers
+# linked from the same objects, and the generator's inputs in `inputs`. The identifiers AWS-LC's public headers
 # declare, which say which of its exports are public, are those the headers
 # give C and C++ programs, preprocessed, and those in the macros the headers
 # define for programs to expand.
-def build wrappers() {
+def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
     = installed(
         build awslc(),
-        "D={WRAPPERS}/dist; T={WRAPPERS}/testing; \
-         mkdir -p gen $D/lib/pkgconfig $D/include $D/share/rust $T/lib; \
+        "D={WRAPPERS}/dist; T={WRAPPERS}/testing; I={WRAPPERS}/inputs; \
+         mkdir -p gen $D/lib/pkgconfig $D/include $D/share/rust $T/lib $I; \
          find {REFERENCE}/include/openssl -name '*.h' \
          | grep -v -E '/(arm_arch|asm_base|boringssl_prefix_symbols|boringssl_prefix_symbols_asm)\\.h$' \
          | sed 's|^{REFERENCE}/include/||' | sort | sed 's|.*|#include <&>|' > gen/public.c; \
          $CC -E -dD -I{REFERENCE}/include gen/public.c > gen/public.i; \
          $CXX -E -dD -x c++ -I{REFERENCE}/include gen/public.c > gen/public.ii; \
-         cat gen/public.i gen/public.ii | grep -v '^# [0-9]' | grep -o -E '[A-Za-z_][A-Za-z0-9_]*' \
-         | sort -u > gen/public.txt; \
+         cat gen/public.i gen/public.ii > gen/public.pre; \
          \"$READELF\" -sW lib/libcrypto.a > gen/crypto.syms; \
          \"$READELF\" -sW lib/libssl.a > gen/ssl.syms; \
-         sh {GENERATOR} {awslc_symbol_prefix()} gen/public.txt gen/crypto.syms gen/ssl.syms gen; \
-         $CC -c gen/crypto-forwarders.S -o gen/crypto-forwarders.o; \
-         $CC -c gen/ssl-forwarders.S -o gen/ssl-forwarders.o; \
+         {PYTHON}/bin/python3 -I {GENERATOR} {awslc_symbol_prefix()} gen/public.pre \
+         gen/crypto.syms gen/ssl.syms {BINDINGS_TOML} {ALGORITHMS_TOML} gen; \
+         cp gen/public.pre gen/crypto.syms gen/ssl.syms $I/; \
+         for lib in crypto ssl; do \
+         $CC -c gen/$lib-forwarders.S -o gen/$lib-forwarders.o; \
+         $CC {OWN_CFLAGS} -I{REFERENCE}/include -I{RUNTIME} -c gen/$lib-hooks.c -o gen/$lib-hooks.o; \
+         done; \
+         $CC {OWN_CFLAGS} -Iinclude -I{RUNTIME} -c {RUNTIME}/policy.c -o gen/policy.o; \
+         $CC {OWN_CFLAGS} -I{RUNTIME} -c {RUNTIME}/decision.c -o gen/decision.o; \
+         $CC {OWN_CFLAGS} -I{RUNTIME} -c gen/policy-table.c -o gen/policy-table.o; \
          begin=$($CC -print-file-name=crtbeginS.o); end=$($CC -print-file-name=crtendS.o); \
          for variant in dist testing; do \
          if [ $variant = dist ]; then maps=; out=$D/lib; else maps=-testing; out=$T/lib; fi; \
          $CC {LINK} -Wl,-soname,libpcrypto.so.1 -o $out/libpcrypto.so.1 \"$begin\" \
-         gen/crypto-forwarders.o -Wl,--whole-archive lib/libcrypto.a -Wl,--no-whole-archive \
+         gen/crypto-forwarders.o gen/crypto-hooks.o gen/policy.o gen/decision.o gen/policy-table.o \
+         -Wl,--whole-archive lib/libcrypto.a -Wl,--no-whole-archive \
          -Wl,--version-script=gen/crypto$maps.map -lpthread \"$end\"; \
          $CXX {LINK} -Wl,-soname,libpssl.so.1 -o $out/libpssl.so.1 \"$begin\" \
-         gen/ssl-forwarders.o -Wl,--whole-archive lib/libssl.a -Wl,--no-whole-archive \
+         gen/ssl-forwarders.o gen/ssl-hooks.o -Wl,--whole-archive lib/libssl.a -Wl,--no-whole-archive \
          -Wl,--version-script=gen/ssl$maps.map -L$out -l:libpcrypto.so.1 -lpthread \"$end\"; \
          done; \
          ln -s libpcrypto.so.1 $D/lib/libpcrypto.so; ln -s libpssl.so.1 $D/lib/libpssl.so; \
@@ -95,7 +120,11 @@ def build wrappers() {
         WRAPPERS,
         given = [
             {at = REFERENCE; place = build awslc_reference()},
-            {at = GENERATOR; place = file("generate-forwarders.sh")},
+            {at = GENERATOR; place = file("generate.py")},
+            {at = BINDINGS_TOML; place = file("bindings.toml")},
+            {at = ALGORITHMS_TOML; place = file("algorithms.toml")},
+            {at = RUNTIME; place = dir("runtime")},
+            {at = PYTHON; place = python.root},
             {at = BINDINGS; place = build awslc_rust_bindings()},
         ],
     )

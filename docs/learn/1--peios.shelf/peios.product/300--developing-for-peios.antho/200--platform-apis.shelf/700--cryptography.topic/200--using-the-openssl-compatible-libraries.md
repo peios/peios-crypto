@@ -27,7 +27,12 @@ see [Using Cryptography from Rust](~peios/cryptography/using-cryptography-from-r
   doesn't ship them as a package yet.
 - Install a C compiler and pkg-config.
 - Expect Peios crypto policy to apply to these libraries' callers. The
-  current libraries don't enforce it: every call goes straight to AWS-LC.
+  current libraries enforce only its floor, which no machine can loosen:
+  they refuse the null cipher and RSA keys under 1024 bits when a program
+  starts a digest, an HMAC or a cipher, or generates an RSA key, through
+  `EVP_DigestInit_ex`, `HMAC_Init_ex`, `EVP_EncryptInit_ex`,
+  `EVP_DecryptInit_ex` or `RSA_generate_key_ex`. Other calls go straight
+  to AWS-LC for now.
 
 ## Build a C program
 
@@ -108,6 +113,12 @@ not all of OpenSSL 3. Expect to change a program that needs:
 AWS-LC's porting documents, in its repository's `docs/porting` directory,
 list the functions it leaves out and those that behave differently.
 
-Use only OpenSSL's names. The libraries also export names beginning
-`peios_awslc_`, which libpssl uses internally; they aren't part of the
-API, and a program that calls them won't pass Peios crypto policy.
+A call that Peios crypto policy refuses fails as any failed OpenSSL call
+does, and leaves an error on the thread's error queue whose library is
+`ERR_LIB_USER`.
+
+The libraries export only the API AWS-LC's headers declare. Functions
+AWS-LC exports only for its own tests, such as its ML-KEM internals, aren't
+available. Use only OpenSSL's names: libpcrypto also exports names
+beginning `peios_awslc_`, which libpssl uses internally. They aren't part
+of the API, and a program that calls them won't pass Peios crypto policy.

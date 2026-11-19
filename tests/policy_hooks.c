@@ -1,0 +1,102 @@
+// libpcrypto's policy hooks, as a program reaches them. Under Peios's
+// default policy, only the floor is refused: the null cipher and RSA keys
+// under 1024 bits. An algorithm the policy doesn't grade is refused too,
+// and every digest and cipher AWS-LC can look up is graded.
+
+#include <stdio.h>
+
+#include <openssl/bn.h>
+#include <openssl/cipher.h>
+#include <openssl/digest.h>
+#include <openssl/err.h>
+#include <openssl/hmac.h>
+#include <openssl/rsa.h>
+
+// libpcrypto's reasons, in ERR_LIB_USER.
+#define REFUSED_BY_POLICY 1000
+#define UNGRADED_ALGORITHM 1001
+
+static int failures = 0;
+
+static void check(int ok, const char *what) {
+    if (!ok) {
+        fprintf(stderr, "policy_hooks: %s\n", what);
+        failures++;
+    }
+}
+
+// Whether the error queue's first error is libpcrypto's `reason`; clears
+// the queue.
+static int refused_with(int reason) {
+    uint32_t error = ERR_get_error();
+    ERR_clear_error();
+    return ERR_GET_LIB(error) == ERR_LIB_USER && ERR_GET_REASON(error) == reason;
+}
+
+static int digest_allowed(const EVP_MD *md) {
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    int ok = EVP_DigestInit_ex(ctx, md, NULL);
+    EVP_MD_CTX_free(ctx);
+    return ok;
+}
+
+static int encrypt_allowed(const EVP_CIPHER *cipher, int encrypt) {
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    int ok = encrypt ? EVP_EncryptInit_ex(ctx, cipher, NULL, NULL, NULL)
+                     : EVP_DecryptInit_ex(ctx, cipher, NULL, NULL, NULL);
+    EVP_CIPHER_CTX_free(ctx);
+    return ok;
+}
+
+static int rsa_allowed(int bits) {
+    RSA *rsa = RSA_new();
+    BIGNUM *e = BN_new();
+    BN_set_word(e, RSA_F4);
+    int ok = RSA_generate_key_ex(rsa, bits, e, NULL);
+    BN_free(e);
+    RSA_free(rsa);
+    return ok;
+}
+
+int main(void) {
+    check(digest_allowed(EVP_sha256()), "SHA-256 was refused");
+    check(digest_allowed(EVP_md5()), "MD5, grade U, was refused under the default policy");
+
+    static const uint8_t key[32] = {0};
+    HMAC_CTX hmac;
+    HMAC_CTX_init(&hmac);
+    check(HMAC_Init_ex(&hmac, key, sizeof(key), EVP_sha256(), NULL), "HMAC-SHA-256 was refused");
+    check(!HMAC_Init_ex(&hmac, key, sizeof(key), EVP_shake128(), NULL) &&
+              refused_with(UNGRADED_ALGORITHM),
+          "HMAC over SHAKE128, which isn't graded, wasn't refused as ungraded");
+    HMAC_CTX_cleanup(&hmac);
+
+    check(encrypt_allowed(EVP_aes_128_gcm(), 1), "AES-128-GCM encryption was refused");
+    check(encrypt_allowed(EVP_des_ede3_cbc(), 0), "Triple DES decryption was refused");
+    check(!encrypt_allowed(EVP_enc_null(), 1) && refused_with(REFUSED_BY_POLICY),
+          "the null cipher wasn't refused for encryption");
+    check(!encrypt_allowed(EVP_enc_null(), 0) && refused_with(REFUSED_BY_POLICY),
+          "the null cipher wasn't refused for decryption");
+
+    check(!rsa_allowed(512) && refused_with(REFUSED_BY_POLICY),
+          "a 512-bit RSA key wasn't refused");
+    check(rsa_allowed(2048), "a 2048-bit RSA key was refused");
+
+    // Every digest and cipher AWS-LC looks up by NID is graded: none is
+    // refused as ungraded.
+    for (int nid = 1; nid <= 1000; nid++) {
+        const EVP_MD *md = EVP_get_digestbynid(nid);
+        if (md != NULL && !digest_allowed(md)) {
+            check(!refused_with(UNGRADED_ALGORITHM), "a digest AWS-LC offers isn't graded");
+        }
+        const EVP_CIPHER *cipher = EVP_get_cipherbynid(nid);
+        if (cipher != NULL && !encrypt_allowed(cipher, 1)) {
+            check(!refused_with(UNGRADED_ALGORITHM), "a cipher AWS-LC offers isn't graded");
+        }
+    }
+
+    if (failures == 0) {
+        puts("policy_hooks: ok");
+    }
+    return failures != 0;
+}

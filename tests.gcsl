@@ -7,6 +7,7 @@ import BuildEnv from "github.com/gcslib/buildenv"
 import base from "github.com/gcslib/buildenv"
 import bin_path from "github.com/gcslib/buildenv"
 import "github.com/gcslib/rust"
+import PythonToolchain from "github.com/gcslib/python"
 
 let TOOL_CC = "/opt/cc"
 
@@ -86,9 +87,14 @@ def test pcrypto_exports(
 }
 
 # AWS-LC's own `crypto_test` passes against the testing libpcrypto, which
-# exports the internals it calls. One test, of a connected IPv6 datagram
-# socket, is left out: the sandbox has no IPv6, and the test, unlike its
-# neighbours, doesn't skip itself without it.
+# exports the internals it calls. Two tests are left out:
+#
+# - `AddrFamily/BIODgramTest.SocketDatagramSetConnected/1`, of a connected
+#   IPv6 datagram socket: the sandbox has no IPv6, and the test, unlike its
+#   neighbours, doesn't skip itself without it.
+# - `RSATest.GenerateSmallKey`, which expects AWS-LC's own error for a
+#   255-bit RSA key. The key is still refused, but by Peios's policy
+#   floor, before AWS-LC sees it, so the error is Peios's.
 def test awslc_crypto_test(
     testing: Dir = build pcrypto_testing(),
     reference: Dir = build awslc_reference(),
@@ -97,7 +103,7 @@ def test awslc_crypto_test(
 ) {
     let ran = checked(
         "{as_awslc("{REFERENCE}/tests/crypto_test")}; cd /tmp; {REFERENCE}/tests/crypto_test \
-         --gtest_filter=-AddrFamily/BIODgramTest.SocketDatagramSetConnected/1",
+         --gtest_filter=-AddrFamily/BIODgramTest.SocketDatagramSetConnected/1:RSATest.GenerateSmallKey",
         [{at = TESTING; place = testing}, {at = "{REFERENCE}/tests"; place = reference.dir("tests")}],
         c = c,
         env = env,
@@ -166,6 +172,70 @@ def test consumer_builds(
          || {{ echo \"linked with -lssl -lcrypto, the consumer does not load $lib\"; exit 1; }}; done; \
          LD_LIBRARY_PATH={PCRYPTO}/lib ./consumer-openssl-names",
         [{at = PCRYPTO; place = pcrypto}, {at = "/work/consumer.c"; place = source}],
+        c = c,
+        env = env,
+    )
+}
+
+# The generator refuses bindings that miss a public function, name one
+# AWS-LC doesn't export, classify one twice or give a group no reason, and
+# algorithms that leave a digest ungraded.
+def test generator_refuses(
+    inputs: Dir = build generator_inputs(),
+    generator: File = file("generate.py"),
+    test: File = file("tests/generator_test.py"),
+    bindings: File = file("bindings.toml"),
+    algorithms: File = file("algorithms.toml"),
+    python: PythonToolchain = toolchain.get(Toolchain::Python),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let ran = checked(
+        "/opt/python/bin/python3 -I /work/generator_test.py /work/generate.py /work/inputs \
+         /work/bindings.toml /work/algorithms.toml {PREFIX}",
+        [
+            {at = "/work/inputs"; place = inputs},
+            {at = "/work/generate.py"; place = generator},
+            {at = "/work/generator_test.py"; place = test},
+            {at = "/work/bindings.toml"; place = bindings},
+            {at = "/work/algorithms.toml"; place = algorithms},
+            {at = "/opt/python"; place = python.root},
+        ],
+        c = c,
+        env = env,
+    )
+}
+
+# libpcrypto's policy hooks refuse the floor, refuse what isn't graded, and
+# allow the rest under Peios's default policy; every digest and cipher
+# AWS-LC offers is graded.
+def test policy_hooks(
+    pcrypto: Dir = build pcrypto(),
+    source: File = file("tests/policy_hooks.c"),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let ran = checked(
+        "cd /tmp; \"$CC\" -Wall -Werror -I{PCRYPTO}/include -o policy_hooks /work/policy_hooks.c \
+         -L{PCRYPTO}/lib -lpcrypto; LD_LIBRARY_PATH={PCRYPTO}/lib ./policy_hooks",
+        [{at = PCRYPTO; place = pcrypto}, {at = "/work/policy_hooks.c"; place = source}],
+        c = c,
+        env = env,
+    )
+}
+
+# The policy decision, under policies the libraries don't run with yet:
+# tightened grades and FIPS.
+def test policy_decision(
+    runtime: Dir = dir("runtime"),
+    source: File = file("tests/decision_test.c"),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let ran = checked(
+        "cd /tmp; \"$CC\" -Wall -Wextra -Werror -I/work/runtime -o decision_test \
+         /work/decision_test.c /work/runtime/decision.c; ./decision_test",
+        [{at = "/work/runtime"; place = runtime}, {at = "/work/decision_test.c"; place = source}],
         c = c,
         env = env,
     )

@@ -1,0 +1,625 @@
+# Peios's grades for each (algorithm, operation) libpcrypto's hooks govern.
+# PROVISIONAL: the Peios Cryptographic Grading specification (PEI-1737)
+# will set the methodology and review these.
+#
+# Grades, from the rule agreed on PEI-1721:
+#   U  practically broken, or forbidden by current standards (an RFC's
+#      "MUST NOT", NIST's "disallowed");
+#   D  no practical break, but below 112-bit security or formally
+#      deprecated;
+#   C  112-bit security;
+#   B  128-bit security;
+#   A  192-bit or more.
+# `fips` says whether FIPS 140-3 approves the use, apart from the grade.
+# `floor` refuses the use under every policy, and exceptions can't lift it.
+#
+# Each digest and cipher is named by the getter AWS-LC's API offers it
+# through. The build fails unless every getter the public headers declare
+# is graded here, and the runtime refuses any it can't find, so nothing
+# goes ungraded.
+#
+# Sources: NIST SP 800-57 Part 1 Rev. 5 (security strengths), SP 800-131A
+# Rev. 2 (transitions), SP 800-107 Rev. 1 (hash and HMAC strength), RFC
+# 6150 (MD4), RFC 6151 (MD5), RFC 7465 (RC4), RFC 8996 (TLS 1.0 and 1.1),
+# FIPS 180-4, FIPS 202, FIPS 186-5.
+
+# --- Digests ----------------------------------------------------------
+# `digest` grades collision resistance, half the output for an unbroken
+# hash; `hmac` grades the MAC, whose strength doesn't rest on collision
+# resistance.
+
+[[algorithm]]
+id = "md4"
+kind = "digest"
+getter = "EVP_md4"
+# RFC 6150: collisions in microseconds; HMAC-MD4 keys are recoverable.
+operations.digest = { grade = "U", fips = false }
+operations.hmac = { grade = "U", fips = false }
+
+[[algorithm]]
+id = "md5"
+kind = "digest"
+getter = "EVP_md5"
+# RFC 6151: practical collisions, chosen-prefix included. HMAC-MD5 has no
+# practical attack but isn't for new protocols.
+operations.digest = { grade = "U", fips = false }
+operations.hmac = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "sha1"
+kind = "digest"
+getter = "EVP_sha1"
+# Practical collisions (SHAttered, 2017) and chosen-prefix collisions
+# (2020). FIPS 180-4 still approves SHA-1 for uses other than signatures.
+# HMAC-SHA-1 is acceptable under SP 800-131A Rev. 2.
+operations.digest = { grade = "U", fips = true }
+operations.hmac = { grade = "C", fips = true }
+
+[[algorithm]]
+id = "sha224"
+kind = "digest"
+getter = "EVP_sha224"
+operations.digest = { grade = "C", fips = true }
+operations.hmac = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "sha256"
+kind = "digest"
+getter = "EVP_sha256"
+operations.digest = { grade = "B", fips = true }
+operations.hmac = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "sha384"
+kind = "digest"
+getter = "EVP_sha384"
+operations.digest = { grade = "A", fips = true }
+operations.hmac = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "sha512"
+kind = "digest"
+getter = "EVP_sha512"
+operations.digest = { grade = "A", fips = true }
+operations.hmac = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "sha512-224"
+kind = "digest"
+getter = "EVP_sha512_224"
+operations.digest = { grade = "C", fips = true }
+operations.hmac = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "sha512-256"
+kind = "digest"
+getter = "EVP_sha512_256"
+operations.digest = { grade = "B", fips = true }
+operations.hmac = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "sha3-224"
+kind = "digest"
+getter = "EVP_sha3_224"
+operations.digest = { grade = "C", fips = true }
+operations.hmac = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "sha3-256"
+kind = "digest"
+getter = "EVP_sha3_256"
+operations.digest = { grade = "B", fips = true }
+operations.hmac = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "sha3-384"
+kind = "digest"
+getter = "EVP_sha3_384"
+operations.digest = { grade = "A", fips = true }
+operations.hmac = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "sha3-512"
+kind = "digest"
+getter = "EVP_sha3_512"
+operations.digest = { grade = "A", fips = true }
+operations.hmac = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "shake128"
+kind = "digest"
+getter = "EVP_shake128"
+# FIPS 202: 128-bit security. HMAC isn't defined over an XOF.
+operations.digest = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "shake256"
+kind = "digest"
+getter = "EVP_shake256"
+operations.digest = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "blake2b256"
+kind = "digest"
+getter = "EVP_blake2b256"
+# RFC 7693; not NIST-approved.
+operations.digest = { grade = "B", fips = false }
+operations.hmac = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "keccak256"
+kind = "digest"
+getter = "EVP_keccak256"
+# Keccak with the original padding, as Ethereum uses it, not SHA3-256.
+operations.digest = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "ripemd160"
+kind = "digest"
+getter = "EVP_ripemd160"
+# 80-bit collision resistance; no practical break.
+operations.digest = { grade = "D", fips = false }
+operations.hmac = { grade = "C", fips = false }
+
+[[algorithm]]
+id = "md5-sha1"
+kind = "digest"
+getter = "EVP_md5_sha1"
+# MD5 and SHA-1 side by side, for TLS 1.0 and 1.1 handshakes, which RFC
+# 8996 deprecates.
+operations.digest = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "md-null"
+kind = "digest"
+getter = "EVP_md_null"
+# Hashes nothing.
+operations.digest = { grade = "U", fips = false }
+
+# --- Ciphers -----------------------------------------------------------
+# Graded by key strength, and by the block size where 64-bit blocks make
+# birthday attacks practical (Sweet32, 2016).
+
+[[algorithm]]
+id = "enc-null"
+kind = "cipher"
+getter = "EVP_enc_null"
+# Encrypts nothing: on the floor, as NULL ciphers are.
+operations.encrypt = { floor = true }
+operations.decrypt = { floor = true }
+
+[[algorithm]]
+id = "rc4"
+kind = "cipher"
+getter = "EVP_rc4"
+# RFC 7465 prohibits RC4 in TLS for its biases.
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "U", fips = false }
+
+[[algorithm]]
+id = "rc2-40-cbc"
+kind = "cipher"
+getter = "EVP_rc2_40_cbc"
+# A 40-bit export-grade cipher: on the floor.
+operations.encrypt = { floor = true }
+operations.decrypt = { floor = true }
+
+[[algorithm]]
+id = "rc2-cbc"
+kind = "cipher"
+getter = "EVP_rc2_cbc"
+# 64-bit blocks and a weak key schedule; no standard recommends it.
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "U", fips = false }
+
+[[algorithm]]
+id = "des-ecb"
+kind = "cipher"
+getter = "EVP_des_ecb"
+# A 56-bit key, searched exhaustively since 1998.
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "U", fips = false }
+
+[[algorithm]]
+id = "des-cbc"
+kind = "cipher"
+getter = "EVP_des_cbc"
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "U", fips = false }
+
+[[algorithm]]
+id = "des-ede"
+kind = "cipher"
+getter = "EVP_des_ede"
+# Two-key Triple DES: SP 800-131A Rev. 2 disallows encryption; decryption
+# of existing data is legacy use.
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "des-ede-cbc"
+kind = "cipher"
+getter = "EVP_des_ede_cbc"
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "des-ede3"
+kind = "cipher"
+getter = "EVP_des_ede3"
+# Three-key Triple DES: SP 800-131A Rev. 2 disallows encryption after
+# 2023; decryption of existing data remains approved legacy use.
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "D", fips = true }
+
+[[algorithm]]
+id = "des-ede3-ecb"
+kind = "cipher"
+getter = "EVP_des_ede3_ecb"
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "D", fips = true }
+
+[[algorithm]]
+id = "des-ede3-cbc"
+kind = "cipher"
+getter = "EVP_des_ede3_cbc"
+operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "D", fips = true }
+
+[[algorithm]]
+id = "bf-cbc"
+kind = "cipher"
+getter = "EVP_bf_cbc"
+# Blowfish: 64-bit blocks.
+operations.encrypt = { grade = "D", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "bf-ecb"
+kind = "cipher"
+getter = "EVP_bf_ecb"
+operations.encrypt = { grade = "D", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "bf-cfb"
+kind = "cipher"
+getter = "EVP_bf_cfb"
+operations.encrypt = { grade = "D", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "bf-cfb64"
+kind = "cipher"
+getter = "EVP_bf_cfb64"
+operations.encrypt = { grade = "D", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "bf-ofb"
+kind = "cipher"
+getter = "EVP_bf_ofb"
+operations.encrypt = { grade = "D", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "cast5-cbc"
+kind = "cipher"
+getter = "EVP_cast5_cbc"
+# CAST5: 64-bit blocks.
+operations.encrypt = { grade = "D", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "cast5-ecb"
+kind = "cipher"
+getter = "EVP_cast5_ecb"
+operations.encrypt = { grade = "D", fips = false }
+operations.decrypt = { grade = "D", fips = false }
+
+# AES: 128-bit keys are B, 192 and 256 A. Every mode AWS-LC offers is
+# approved (SP 800-38A to 38F); XTS is for storage only.
+
+[[algorithm]]
+id = "aes-128-ecb"
+kind = "cipher"
+getter = "EVP_aes_128_ecb"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aes-128-cbc"
+kind = "cipher"
+getter = "EVP_aes_128_cbc"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aes-128-ctr"
+kind = "cipher"
+getter = "EVP_aes_128_ctr"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aes-128-ofb"
+kind = "cipher"
+getter = "EVP_aes_128_ofb"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aes-128-cfb"
+kind = "cipher"
+getter = "EVP_aes_128_cfb"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aes-128-cfb1"
+kind = "cipher"
+getter = "EVP_aes_128_cfb1"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aes-128-cfb8"
+kind = "cipher"
+getter = "EVP_aes_128_cfb8"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aes-128-cfb128"
+kind = "cipher"
+getter = "EVP_aes_128_cfb128"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aes-128-gcm"
+kind = "cipher"
+getter = "EVP_aes_128_gcm"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aes-128-ccm"
+kind = "cipher"
+getter = "EVP_aes_128_ccm"
+operations.encrypt = { grade = "B", fips = true }
+operations.decrypt = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "aes-128-cbc-hmac-sha1"
+kind = "cipher"
+getter = "EVP_aes_128_cbc_hmac_sha1"
+# A stitched TLS record cipher: no stronger than its HMAC-SHA-1.
+operations.encrypt = { grade = "C", fips = false }
+operations.decrypt = { grade = "C", fips = false }
+
+[[algorithm]]
+id = "aes-128-cbc-hmac-sha256"
+kind = "cipher"
+getter = "EVP_aes_128_cbc_hmac_sha256"
+operations.encrypt = { grade = "B", fips = false }
+operations.decrypt = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "aes-192-ecb"
+kind = "cipher"
+getter = "EVP_aes_192_ecb"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-192-cbc"
+kind = "cipher"
+getter = "EVP_aes_192_cbc"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-192-ctr"
+kind = "cipher"
+getter = "EVP_aes_192_ctr"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-192-ofb"
+kind = "cipher"
+getter = "EVP_aes_192_ofb"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-192-cfb"
+kind = "cipher"
+getter = "EVP_aes_192_cfb"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-192-cfb1"
+kind = "cipher"
+getter = "EVP_aes_192_cfb1"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-192-cfb8"
+kind = "cipher"
+getter = "EVP_aes_192_cfb8"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-192-cfb128"
+kind = "cipher"
+getter = "EVP_aes_192_cfb128"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-192-gcm"
+kind = "cipher"
+getter = "EVP_aes_192_gcm"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-192-ccm"
+kind = "cipher"
+getter = "EVP_aes_192_ccm"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-ecb"
+kind = "cipher"
+getter = "EVP_aes_256_ecb"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-cbc"
+kind = "cipher"
+getter = "EVP_aes_256_cbc"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-ctr"
+kind = "cipher"
+getter = "EVP_aes_256_ctr"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-ofb"
+kind = "cipher"
+getter = "EVP_aes_256_ofb"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-cfb"
+kind = "cipher"
+getter = "EVP_aes_256_cfb"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-cfb1"
+kind = "cipher"
+getter = "EVP_aes_256_cfb1"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-cfb8"
+kind = "cipher"
+getter = "EVP_aes_256_cfb8"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-cfb128"
+kind = "cipher"
+getter = "EVP_aes_256_cfb128"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-gcm"
+kind = "cipher"
+getter = "EVP_aes_256_gcm"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-ccm"
+kind = "cipher"
+getter = "EVP_aes_256_ccm"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-xts"
+kind = "cipher"
+getter = "EVP_aes_256_xts"
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-wrap"
+kind = "cipher"
+getter = "EVP_aes_256_wrap"
+# AES key wrap, SP 800-38F.
+operations.encrypt = { grade = "A", fips = true }
+operations.decrypt = { grade = "A", fips = true }
+
+[[algorithm]]
+id = "aes-256-cbc-hmac-sha1"
+kind = "cipher"
+getter = "EVP_aes_256_cbc_hmac_sha1"
+operations.encrypt = { grade = "C", fips = false }
+operations.decrypt = { grade = "C", fips = false }
+
+[[algorithm]]
+id = "aes-256-cbc-hmac-sha256"
+kind = "cipher"
+getter = "EVP_aes_256_cbc_hmac_sha256"
+operations.encrypt = { grade = "B", fips = false }
+operations.decrypt = { grade = "B", fips = false }
+
+[[algorithm]]
+id = "chacha20"
+kind = "cipher"
+getter = "EVP_chacha20"
+# RFC 8439; not NIST-approved.
+operations.encrypt = { grade = "A", fips = false }
+operations.decrypt = { grade = "A", fips = false }
+
+[[algorithm]]
+id = "chacha20-poly1305"
+kind = "cipher"
+getter = "EVP_chacha20_poly1305"
+operations.encrypt = { grade = "A", fips = false }
+operations.decrypt = { grade = "A", fips = false }
+
+# --- RSA key sizes -----------------------------------------------------
+# By SP 800-57 Part 1 Rev. 5, Table 2. FIPS 186-5 approves generating keys
+# of 2048 bits or more.
+
+[[algorithm]]
+id = "rsa-below-1024"
+kind = "rsa"
+bits = [0, 1023]
+operations.keygen = { floor = true }
+
+[[algorithm]]
+id = "rsa-1024"
+kind = "rsa"
+bits = [1024, 2047]
+# 80-bit security.
+operations.keygen = { grade = "D", fips = false }
+
+[[algorithm]]
+id = "rsa-2048"
+kind = "rsa"
+bits = [2048, 3071]
+operations.keygen = { grade = "C", fips = true }
+
+[[algorithm]]
+id = "rsa-3072"
+kind = "rsa"
+bits = [3072, 7679]
+operations.keygen = { grade = "B", fips = true }
+
+[[algorithm]]
+id = "rsa-7680"
+kind = "rsa"
+bits = [7680, 2147483647]
+operations.keygen = { grade = "A", fips = true }

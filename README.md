@@ -9,10 +9,16 @@
   pkg-config files and Rust bindings, so that C programs and aws-lc-rs
   use them as the system's OpenSSL and AWS-LC.
 - `libpeios-crypto`: the opinionated Peios cryptography API, with a C ABI.
-- The forwarder generator, policy data and policy runtime.
+- The generator, `generate.py`, and the data it reads:
+  - `bindings.toml` classifies every function AWS-LC's API offers as
+    forwarded unchanged, hooked, or pending a hook, and the build fails on
+    any it misses.
+  - `algorithms.toml` grades each algorithm and operation the hooks
+    govern.
+- The policy runtime, in `runtime/`, which the hooks ask.
 
 `pekit build pcrypto` builds the libraries; `pekit test` runs AWS-LC's own
-test suites and an aws-lc-rs program against them.
+test suites, an aws-lc-rs program and the policy's tests against them.
 
 The design and its decisions are recorded in Acta under PEI-1721. The Rust
 crate `peios-crypto` lives in peios-rs.
