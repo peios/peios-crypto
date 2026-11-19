@@ -14,11 +14,16 @@ enum peios_kind {
     PEIOS_KIND_DIGEST,
     PEIOS_KIND_CIPHER,
     PEIOS_KIND_RSA,
+    /* An algorithm a function fixes by its name, MD5's or Poly1305's, which
+       a hook names by its entry. */
+    PEIOS_KIND_FIXED,
 };
 
 enum peios_operation {
     PEIOS_OP_DIGEST,
     PEIOS_OP_HMAC,
+    PEIOS_OP_CMAC,
+    PEIOS_OP_MAC,
     PEIOS_OP_ENCRYPT,
     PEIOS_OP_DECRYPT,
     PEIOS_OP_KEYGEN,
@@ -82,6 +87,16 @@ enum peios_decision peios_policy_decision(const struct peios_algorithm *algorith
 int peios_policy_digest(const struct env_md_st *md, enum peios_operation op);
 int peios_policy_cipher(const struct evp_cipher_st *cipher, enum peios_operation op);
 int peios_policy_rsa_keygen(int bits);
+
+/* The check for a function whose name fixes its algorithm: a hook passes
+   the entry, which the generator finds by its id. */
+int peios_policy_algorithm(const struct peios_algorithm *algorithm);
+
+/* Ends the process, for a refused call to `function`, which can't report
+   failure: it returns nothing, or nothing its callers check, as with
+   OpenSSL's `MD5_Init`. Carrying on would leave the caller using a
+   context or output that was never computed. */
+__attribute__((noreturn)) void peios_policy_abort(const char *function);
 
 #define PEIOS_R_REFUSED_BY_POLICY 1000
 #define PEIOS_R_UNGRADED_ALGORITHM 1001

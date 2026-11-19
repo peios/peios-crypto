@@ -5,12 +5,19 @@
 
 #include <stdio.h>
 
+#include <string.h>
+
 #include <openssl/bn.h>
 #include <openssl/cipher.h>
+#include <openssl/cmac.h>
 #include <openssl/digest.h>
 #include <openssl/err.h>
 #include <openssl/hmac.h>
+#include <openssl/md5.h>
+#include <openssl/poly1305.h>
 #include <openssl/rsa.h>
+#include <openssl/sha.h>
+#include <openssl/siphash.h>
 
 // libpcrypto's reasons, in ERR_LIB_USER.
 #define REFUSED_BY_POLICY 1000
@@ -81,6 +88,38 @@ int main(void) {
     check(!rsa_allowed(512) && refused_with(REFUSED_BY_POLICY),
           "a 512-bit RSA key wasn't refused");
     check(rsa_allowed(2048), "a 2048-bit RSA key was refused");
+
+    // The hooked one-shot and low-level digests and MACs still compute.
+    static const uint8_t abc_sha256[32] = {
+        0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40,
+        0xde, 0x5d, 0xae, 0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17,
+        0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad};
+    uint8_t out[64];
+    check(SHA256((const uint8_t *)"abc", 3, out) == out && memcmp(out, abc_sha256, 32) == 0,
+          "SHA256() gave the wrong digest");
+    unsigned out_len = 0;
+    check(EVP_Digest("abc", 3, out, &out_len, EVP_sha256(), NULL) && out_len == 32 &&
+              memcmp(out, abc_sha256, 32) == 0,
+          "EVP_Digest gave the wrong digest");
+    MD5_CTX md5;
+    check(MD5_Init(&md5) && MD5_Update(&md5, "abc", 3) && MD5_Final(out, &md5),
+          "MD5_Init, MD5_Update and MD5_Final failed");
+    check(HMAC(EVP_sha256(), key, sizeof(key), (const uint8_t *)"abc", 3, out, &out_len) != NULL,
+          "HMAC() failed");
+
+    CMAC_CTX *cmac = CMAC_CTX_new();
+    check(CMAC_Init(cmac, key, 16, EVP_aes_128_cbc(), NULL), "AES-128 CMAC was refused");
+    check(!CMAC_Init(cmac, key, 16, EVP_bf_cbc(), NULL) && refused_with(UNGRADED_ALGORITHM),
+          "CMAC over Blowfish, which isn't graded, wasn't refused as ungraded");
+    CMAC_CTX_free(cmac);
+    check(AES_CMAC(out, key, 16, (const uint8_t *)"abc", 3), "AES_CMAC was refused");
+
+    poly1305_state poly;
+    CRYPTO_poly1305_init(&poly, key);
+    CRYPTO_poly1305_update(&poly, (const uint8_t *)"abc", 3);
+    CRYPTO_poly1305_finish(&poly, out);
+    static const uint64_t siphash_key[2] = {1, 2};
+    (void)SIPHASH_24(siphash_key, (const uint8_t *)"abc", 3);
 
     // Every digest and cipher AWS-LC looks up by NID is graded: none is
     // refused as ungraded.

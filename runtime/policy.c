@@ -5,6 +5,9 @@
    Until the runtime reads the machine's policy, it applies Peios's
    defaults: nothing above the floor is refused, grades below C are warned
    about, and FIPS is off. Warnings aren't reported yet. */
+#include <stdio.h>
+#include <stdlib.h>
+
 #include <openssl/cipher.h>
 #include <openssl/digest.h>
 #include <openssl/err.h>
@@ -59,6 +62,18 @@ int peios_policy_cipher(const EVP_CIPHER *cipher, enum peios_operation op) {
         }
     }
     return decide(NULL);
+}
+
+int peios_policy_algorithm(const struct peios_algorithm *algorithm) {
+    return decide(algorithm);
+}
+
+void peios_policy_abort(const char *function) {
+    fprintf(stderr,
+            "libpcrypto: Peios crypto policy refused %s, which can't report failure; "
+            "ending the process\n",
+            function);
+    abort();
 }
 
 int peios_policy_rsa_keygen(int bits) {

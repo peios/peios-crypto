@@ -27,13 +27,13 @@ see [Using Cryptography from Rust](~peios/cryptography/using-cryptography-from-r
   doesn't ship them as a package yet.
 - Install a C compiler and pkg-config.
 - Expect Peios crypto policy to apply to these libraries' callers. The
-  current libraries enforce only its floor, which no machine can loosen:
-  they refuse the null cipher, the 40-bit export-grade RC2 cipher and RSA
-  keys under 1024 bits when a program
-  starts a digest, an HMAC or a cipher, or generates an RSA key, through
-  `EVP_DigestInit_ex`, `HMAC_Init_ex`, `EVP_EncryptInit_ex`,
-  `EVP_DecryptInit_ex` or `RSA_generate_key_ex`. Other calls go straight
-  to AWS-LC for now.
+  current libraries apply it when a program computes a digest or a MAC
+  (HMAC, CMAC, Poly1305, or SipHash), starts a cipher with
+  `EVP_EncryptInit_ex` or `EVP_DecryptInit_ex`, or generates a key with
+  `RSA_generate_key_ex`. They enforce only the policy's floor, which no
+  machine can loosen: the null cipher, the 40-bit export-grade RC2 cipher,
+  and RSA keys under 1024 bits. Other calls go straight to AWS-LC for
+  now.
 
 ## Build a C program
 
@@ -116,7 +116,12 @@ list the functions it leaves out and those that behave differently.
 
 A call that Peios crypto policy refuses fails as any failed OpenSSL call
 does, and leaves an error on the thread's error queue whose library is
-`ERR_LIB_USER`.
+`ERR_LIB_USER`. A few functions can't report failure, or have callers
+that never check: the low-level digest functions, such as `SHA256` and
+`MD5_Init`, and Poly1305's and SipHash's. When policy refuses one of
+those, the program ends with a message naming the function, rather than
+carry on with a digest that was never computed. Use the `EVP_` functions
+where a refusal should be handled.
 
 The libraries export only the API AWS-LC's headers declare. Functions
 AWS-LC exports only for its own tests, such as its ML-KEM internals, aren't
