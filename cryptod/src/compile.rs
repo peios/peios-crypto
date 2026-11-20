@@ -28,7 +28,7 @@ use std::fmt;
 use std::io;
 
 use crate::known::Known;
-use crate::policy::{Exception, Grade, Policy};
+use crate::policy::{Exception, Grade, Policy, valid_exception_name};
 
 /// The key, relative to the Registry root.
 pub const KEY: &str = "Machine\\System\\Cryptography";
@@ -122,7 +122,7 @@ impl fmt::Display for Dropped {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Dropped::InvalidName => {
-                write!(f, "its name isn't Owner.Purpose of at most 255 bytes")
+                write!(f, "its name isn't Owner.Purpose, in at most 255 printable ASCII bytes")
             }
             Dropped::UnknownAlgorithm(id) => write!(f, "libpcrypto grades no {id:?}"),
             Dropped::FloorAlgorithm(id) => write!(f, "{id} is on the floor, which nothing excepts"),
@@ -243,7 +243,7 @@ fn exception(
     parse_sddl: &SddlParse,
 ) -> Result<Result<(Read, bool), Dropped>, Failure> {
     let value = |n: &str| source.value(path, n).map_err(Failure::Unreadable);
-    if !valid_name(name) {
+    if !valid_exception_name(name) {
         return Ok(Err(Dropped::InvalidName));
     }
     let algorithms = match value("Algorithms")? {
@@ -305,13 +305,6 @@ fn exception(
         },
         non_fips,
     )))
-}
-
-fn valid_name(name: &str) -> bool {
-    let mut parts = name.splitn(2, '.');
-    let owner = parts.next().unwrap_or("");
-    let purpose = parts.next().unwrap_or("");
-    name.len() <= 255 && !owner.is_empty() && !purpose.is_empty() && !purpose.ends_with('.')
 }
 
 fn invalid(path: &str, name: &str, why: &str) -> Failure {
@@ -528,6 +521,7 @@ mod tests {
             ("Radius.Warn", Box::new(|f| { f.exception("Radius.Warn", &["md5.hmac"], sz("x")).set("Exceptions\\Radius.Warn", "Warn", sz("no")); }), "invalid-setting"),
             ("NoPurpose", Box::new(|f| { f.exception("NoPurpose", &["md5.hmac"], sz("x")); }), "invalid-exception-name"),
             (".Purpose", Box::new(|f| { f.exception(".Purpose", &["md5.hmac"], sz("x")); }), "invalid-exception-name"),
+            ("Radius.Packet Auth", Box::new(|f| { f.exception("Radius.Packet Auth", &["md5.hmac"], sz("x")); }), "invalid-exception-name"),
         ];
         for (name, build, reason) in cases {
             let mut f = Fixture::root();

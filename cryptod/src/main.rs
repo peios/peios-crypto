@@ -15,6 +15,7 @@
 //! publish the policy halfway, which new processes would keep for life; on
 //! reports; and on requests for the posture.
 
+use std::collections::VecDeque;
 use std::fs;
 use std::io::{self, Write};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
@@ -31,7 +32,7 @@ use peios::token::{Token, TokenAccess};
 use cryptod::compile::{self, Compiled};
 use cryptod::events::{self, Peer};
 use cryptod::known::{self, Known};
-use cryptod::posture::{self, Posture};
+use cryptod::posture::{self, Posture, Rate};
 use cryptod::registry::{self, Registry};
 use cryptod::report::{self, Report};
 
@@ -40,6 +41,13 @@ const SETTLE: Duration = Duration::from_millis(300);
 
 /// How often a watch that couldn't be armed is tried again.
 const RETRY: Duration = Duration::from_secs(15);
+
+/// cryptod's own emission rate, in records a second, as burst and rate:
+/// below the least KMES allows a process without SeTcbPrivilege,
+/// `MaxEmitRatePerProcess` at its minimum of 100, which cryptod doesn't
+/// hold. How many records may wait for it.
+const EMIT_RATE: f64 = 80.0;
+const BACKLOG: usize = 4096;
 
 /// How many accepted report connections may wait for their datagram, and
 /// how long each may.
@@ -102,6 +110,8 @@ fn main() {
         watch_retry: Instant::now(),
         settle: None,
         pending: Vec::new(),
+        backlog: Backlog(VecDeque::new()),
+        rate: Rate::new(EMIT_RATE, EMIT_RATE, Instant::now()),
     };
     service.compile(true);
     service.arm();
@@ -142,18 +152,83 @@ struct Service {
     settle: Option<Instant>,
     /// Accepted report connections whose datagram hasn't arrived.
     pending: Vec<(OwnedFd, Instant)>,
+    /// Records waiting for cryptod's emission rate, and that rate.
+    backlog: Backlog,
+    rate: Rate,
+}
+
+/// A record waiting to be written.
+struct Record {
+    event_type: &'static str,
+    essential: bool,
+    payload: Vec<u8>,
+}
+
+/// Records waiting to be written, bounded. One emitter, cryptod, writes for
+/// every process that reports, so its emission rate bounds them all; a
+/// burst, as at boot, waits rather than being lost. Full, it makes room by
+/// dropping its oldest standard record, and refuses a record only when all
+/// it holds are essential.
+struct Backlog(VecDeque<Record>);
+
+impl Backlog {
+    fn push(&mut self, record: Record) -> bool {
+        if self.0.len() >= BACKLOG {
+            match self.0.iter().position(|r| !r.essential) {
+                Some(i) => {
+                    self.0.remove(i);
+                }
+                None => return false,
+            }
+        }
+        self.0.push_back(record);
+        true
+    }
+
+    fn front(&self) -> Option<&Record> {
+        self.0.front()
+    }
+
+    fn pop(&mut self) {
+        self.0.pop_front();
+    }
 }
 
 impl Service {
-    /// Writes an essential record, or a standard one if the event policy
-    /// lets it; logs one that can't be written.
-    fn emit(&self, event_type: &str, tier: Tier, payload: peios::Result<Vec<u8>>) {
-        let result = payload.and_then(|bytes| match (&self.events, tier) {
-            (Some(policy), Tier::Standard) => policy.emit_with(event_type, tier, || bytes).map(|_| ()),
-            _ => peios::event::emit(event_type, &bytes),
-        });
-        if let Err(e) = result {
-            log::warn(format_args!("could not record {event_type}: {e}"));
+    /// Queues a record: an essential one always, a standard one if the
+    /// event policy lets it. Logs one whose payload couldn't be built.
+    fn emit(&mut self, event_type: &'static str, tier: Tier, payload: peios::Result<Vec<u8>>) {
+        let wanted = match (&self.events, tier) {
+            (Some(policy), Tier::Standard) => policy.enabled(event_type, tier).unwrap_or(true),
+            _ => true,
+        };
+        match payload {
+            Ok(bytes) if wanted => {
+                let essential = matches!(tier, Tier::Essential);
+                if !self.backlog.push(Record { event_type, essential, payload: bytes }) {
+                    self.posture.overflow += 1;
+                }
+                self.drain();
+            }
+            Ok(_) => {}
+            Err(e) => log::warn(format_args!("could not build {event_type}: {e}")),
+        }
+    }
+
+    /// Writes what's queued, as fast as cryptod's own emission rate allows.
+    fn drain(&mut self) {
+        let now = Instant::now();
+        while let Some(record) = self.backlog.front() {
+            if !self.rate.take(now) {
+                return;
+            }
+            match peios::event::emit(record.event_type, &record.payload) {
+                Ok(()) => {}
+                // KMES's own limit, set lower than cryptod's: try again.
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => return,
+                Err(e) => log::warn(format_args!("could not record {}: {e}", record.event_type)),
+            }
+            self.backlog.pop();
         }
     }
 
@@ -182,13 +257,22 @@ impl Service {
                 return;
             }
         };
+        // What's dropped, and a failure resolved, are recorded whether or
+        // not the bytes changed: an exception broken on its own changes
+        // nothing published. Each is recorded once, when it's first
+        // dropped, or at start.
+        for (name, why) in &compiled.dropped {
+            let seen = self.compiled.dropped.iter().any(|(n, w)| n == name && w == why);
+            if always || !seen {
+                let detail = format!("the exception {name} is ignored: {why}");
+                self.failed(why.reason(), &detail, Some(name));
+            }
+        }
         let bytes = compiled.policy.encode();
         if !always && self.published.as_deref() == Some(bytes.as_slice()) {
+            self.compiled = compiled;
+            self.last_failure = None;
             return;
-        }
-        for (name, why) in &compiled.dropped {
-            let detail = format!("the exception {name} is ignored: {why}");
-            self.failed(why.reason(), &detail, Some(name));
         }
         let mut current = false;
         for path in [cryptod::CURRENT, cryptod::LAST_KNOWN] {
@@ -235,6 +319,10 @@ impl Service {
         if let Some((_, d)) = self.pending.iter().min_by_key(|(_, d)| *d) {
             deadline = Some(deadline.map_or(*d, |x| x.min(*d)));
         }
+        if self.backlog.front().is_some() {
+            let d = self.rate.next(now);
+            deadline = Some(deadline.map_or(d, |x| x.min(d)));
+        }
         let timeout = deadline.map_or(-1, |d| {
             i32::try_from(d.saturating_duration_since(now).as_millis()).unwrap_or(i32::MAX).max(1)
         });
@@ -274,6 +362,7 @@ impl Service {
             self.drain_watch();
         }
 
+        self.drain();
         let now = Instant::now();
         if self.settle.is_some_and(|d| d <= now) {
             self.settle = None;
@@ -391,6 +480,9 @@ impl Service {
         }
     }
 
+    /// Serves the posture to each waiting connection. Writing blocks the
+    /// loop for at most a second per connection, which only SYSTEM and
+    /// Administrators may make.
     fn serve_posture(&mut self, listener: &OwnedFd) {
         loop {
             // SAFETY: as in accept_reports.

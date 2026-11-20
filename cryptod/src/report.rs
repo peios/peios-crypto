@@ -13,6 +13,7 @@
 //! libpcrypto could have sent, so nothing invented reaches an event.
 
 use crate::known::Known;
+use crate::policy::valid_exception_name;
 
 pub const SOCKET: &str = "/run/cryptod/report";
 
@@ -76,7 +77,7 @@ pub fn parse(msg: &[u8], known: &Known) -> Option<Report> {
     let name = std::str::from_utf8(name).ok()?;
     match (kind, problem) {
         (1, 0) if name.is_empty() && known.get(id).is_some() => Some(Report::Warned { id: id.into() }),
-        (2, 0) if valid_name(name) && known.get(id).is_some() => {
+        (2, 0) if valid_exception_name(name) && known.get(id).is_some() => {
             Some(Report::ExceptionUsed { id: id.into(), exception: name.into() })
         }
         (3, p) if id.is_empty() && name.is_empty() => {
@@ -90,12 +91,6 @@ fn prefixed(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
     let (&len, rest) = bytes.split_first()?;
     let len = usize::from(len);
     (rest.len() >= len).then(|| rest.split_at(len))
-}
-
-/// An exception's name as the compiler accepts one, printable ASCII here
-/// as it'll be written into events.
-fn valid_name(name: &str) -> bool {
-    !name.is_empty() && name.contains('.') && name.bytes().all(|b| b.is_ascii_graphic())
 }
 
 #[cfg(test)]
@@ -139,6 +134,7 @@ mod tests {
             msg(1, 0, "md5.digest", "Extra.Name"),
             msg(2, 0, "md5.hmac", ""),
             msg(2, 0, "md5.hmac", "Bad name\n.x"),
+            msg(2, 0, "md5.hmac", "Radius.Packet Auth"),
             msg(3, 9, "", ""),
             msg(3, 0, "", ""),
             msg(3, 1, "md5.hmac", ""),

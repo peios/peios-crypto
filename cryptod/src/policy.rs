@@ -59,6 +59,21 @@ impl Grade {
     }
 }
 
+/// Whether `name` is an exception's name: `Owner.Purpose`, printable ASCII
+/// with no spaces, at most 255 bytes. The compiler publishes only such
+/// names, and cryptod relays only reports of such names, so that the use of
+/// every exception it publishes can be recorded.
+pub fn valid_exception_name(name: &str) -> bool {
+    let Some((owner, purpose)) = name.split_once('.') else {
+        return false;
+    };
+    name.len() <= 255
+        && !owner.is_empty()
+        && !purpose.is_empty()
+        && !purpose.ends_with('.')
+        && name.bytes().all(|b| b.is_ascii_graphic())
+}
+
 /// One exception, as it applies: the programs its ProgramSecurity grants
 /// may use the algorithms it names.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -178,6 +193,16 @@ mod tests {
         want.push(10);
         want.extend_from_slice(b"md5.digest");
         assert_eq!(bytes, want);
+    }
+
+    #[test]
+    fn exception_names_are_owner_dot_purpose_in_printable_ascii() {
+        assert!(valid_exception_name("Radius.PacketAuth"));
+        assert!(valid_exception_name("Pkg.Legacy.Md5"));
+        for bad in ["NoPurpose", ".Purpose", "Owner.", "Radius.Packet Auth", "Radius.Paket\u{e9}", ""] {
+            assert!(!valid_exception_name(bad), "{bad:?}");
+        }
+        assert!(!valid_exception_name(&format!("A.{}", "x".repeat(254))));
     }
 
     #[test]

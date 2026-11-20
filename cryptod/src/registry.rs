@@ -103,8 +103,3 @@ pub fn watch() -> io::Result<Key> {
     key.set_nonblocking(true)?;
     Ok(key)
 }
-
-/// Whether `watch()` is on the key itself rather than its parent.
-pub fn exists() -> bool {
-    Key::open(None, KEY, KeyAccess::NOTIFY, OpenFlags::empty()).is_ok()
-}

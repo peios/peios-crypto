@@ -36,16 +36,48 @@ struct Usage {
     warned: BTreeMap<String, u64>,
 }
 
+/// A token bucket: `burst` at once, refilled at `rate` a second.
 #[derive(Debug, Clone, Copy)]
-struct Bucket {
+pub struct Rate {
     tokens: f64,
     at: Instant,
+    burst: f64,
+    rate: f64,
+}
+
+impl Rate {
+    pub fn new(burst: f64, rate: f64, now: Instant) -> Rate {
+        Rate { tokens: burst, at: now, burst, rate }
+    }
+
+    fn refill(&mut self, now: Instant) {
+        let elapsed = now.saturating_duration_since(self.at).as_secs_f64();
+        self.tokens = (self.tokens + elapsed * self.rate).min(self.burst);
+        self.at = now;
+    }
+
+    /// Takes a token, if there is one `now`.
+    pub fn take(&mut self, now: Instant) -> bool {
+        self.refill(now);
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+        true
+    }
+
+    /// When there'll next be a token.
+    pub fn next(&mut self, now: Instant) -> Instant {
+        self.refill(now);
+        let wait = ((1.0 - self.tokens).max(0.0) / self.rate).min(1.0);
+        now + std::time::Duration::from_secs_f64(wait)
+    }
 }
 
 #[derive(Default, Debug)]
 pub struct Posture {
     usage: BTreeMap<Vec<u8>, Usage>,
-    buckets: BTreeMap<Vec<u8>, Bucket>,
+    buckets: BTreeMap<Vec<u8>, Rate>,
     /// Reports turned away: over a user's rate, from a peer with no
     /// readable identity, not a report libpcrypto could send, or beyond a
     /// table's bound.
@@ -61,19 +93,20 @@ impl Posture {
         if !self.buckets.contains_key(sid) && self.buckets.len() >= MAX_USERS {
             // Forget the users whose allowance has refilled: they're
             // indistinguishable from ones never seen.
-            self.buckets.retain(|_, b| refill(*b, now).tokens < BURST);
+            self.buckets.retain(|_, b| {
+                b.refill(now);
+                b.tokens < BURST
+            });
             if self.buckets.len() >= MAX_USERS {
                 self.limited += 1;
                 return false;
             }
         }
-        let bucket = self.buckets.entry(sid.to_vec()).or_insert(Bucket { tokens: BURST, at: now });
-        *bucket = refill(*bucket, now);
-        if bucket.tokens < 1.0 {
+        let bucket = self.buckets.entry(sid.to_vec()).or_insert_with(|| Rate::new(BURST, RATE, now));
+        if !bucket.take(now) {
             self.limited += 1;
             return false;
         }
-        bucket.tokens -= 1.0;
         true
     }
 
@@ -186,11 +219,6 @@ impl Posture {
     }
 }
 
-fn refill(b: Bucket, now: Instant) -> Bucket {
-    let elapsed = now.saturating_duration_since(b.at).as_secs_f64();
-    Bucket { tokens: (b.tokens + elapsed * RATE).min(BURST), at: now }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,6 +235,16 @@ mod tests {
         assert!(p.admit(b"bob", t), "one user's flood doesn't limit another");
         assert!(p.admit(b"alice", t + Duration::from_millis(250)));
         assert_eq!(p.limited, 1);
+    }
+
+    #[test]
+    fn a_rate_gives_its_burst_then_says_when_the_next_token_comes() {
+        let t = Instant::now();
+        let mut r = Rate::new(2.0, 4.0, t);
+        assert!(r.take(t) && r.take(t));
+        assert!(!r.take(t));
+        assert_eq!(r.next(t), t + Duration::from_millis(250));
+        assert!(r.take(t + Duration::from_millis(250)));
     }
 
     #[test]
