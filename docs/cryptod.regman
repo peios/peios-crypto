@@ -203,7 +203,7 @@ allow the other. A single REG_SZ entry is accepted too.
 canonical: Machine\System\Cryptography\Exceptions\<name> ProgramSecurity
 type: REG_BINARY or REG_SZ
 default: (required)
-valid: a security descriptor with a DACL
+valid: a security descriptor with an owner and a DACL
 applies: live (for processes started afterwards)
 
 The programs that may use the exception: a security descriptor granting
@@ -211,8 +211,10 @@ them the Use right, `0x1`.
 
 Give a self-relative descriptor as REG_BINARY, or SDDL as REG_SZ. Each
 process's primary token is checked against it, ignoring impersonation.
-Grant a service's own SID, `S-1-5-80-...`, for one service. A descriptor
-with no DACL would grant every program, so cryptod drops it.
+Grant a service's own SID, `S-1-5-80-...`, for one service, as in
+`O:SYG:SYD:(A;;0x1;;;S-1-5-80-...)`. cryptod drops a descriptor with no
+owner, which an access check refuses, and one with no DACL, which would
+grant every program.
 
 --- machine\system\cryptography\exceptions\<name> warn
 canonical: Machine\System\Cryptography\Exceptions\<name> Warn

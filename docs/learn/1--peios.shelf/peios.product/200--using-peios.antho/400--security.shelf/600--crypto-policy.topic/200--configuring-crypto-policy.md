@@ -76,11 +76,13 @@ that no other program gets it.
    reg set -p Machine/System/Cryptography/Exceptions/Example.LegacyRadius \
        Algorithms multi:md5.hmac
    reg set Machine/System/Cryptography/Exceptions/Example.LegacyRadius \
-       ProgramSecurity 'sz:D:(A;;0x1;;;S-1-5-80-<service SID>)'
+       ProgramSecurity 'sz:O:SYG:SYD:(A;;0x1;;;S-1-5-80-<service SID>)'
    ```
 
    Name each entry as an algorithm and an operation. `md5.hmac` doesn't
-   allow `md5.digest`.
+   allow `md5.digest`. The descriptor needs an owner, `O:SY` here, as an
+   access check refuses one without, and a DACL granting the Use right,
+   `0x1`.
 
 3. Check that cryptod published it, and didn't drop it:
 

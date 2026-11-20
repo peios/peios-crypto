@@ -75,9 +75,12 @@ pub fn parse(msg: &[u8], known: &Known) -> Option<Report> {
     }
     let id = std::str::from_utf8(id).ok()?;
     let name = std::str::from_utf8(name).ok()?;
+    // libpcrypto refuses the floor before it could warn about it or use an
+    // exception for it, so a report naming it is invented.
+    let graded = known.get(id).is_some_and(|e| e.grade.is_some());
     match (kind, problem) {
-        (1, 0) if name.is_empty() && known.get(id).is_some() => Some(Report::Warned { id: id.into() }),
-        (2, 0) if valid_exception_name(name) && known.get(id).is_some() => {
+        (1, 0) if name.is_empty() && graded => Some(Report::Warned { id: id.into() }),
+        (2, 0) if valid_exception_name(name) && graded => {
             Some(Report::ExceptionUsed { id: id.into(), exception: name.into() })
         }
         (3, p) if id.is_empty() && name.is_empty() => {
@@ -98,7 +101,7 @@ mod tests {
     use super::*;
 
     fn known() -> Known {
-        Known::parse("md5.hmac\tD\t0\nmd5.digest\tU\t0\n").unwrap()
+        Known::parse("md5.hmac\tD\t0\nmd5.digest\tU\t0\nenc-null.encrypt\tfloor\t0\n").unwrap()
     }
 
     fn msg(kind: u8, problem: u8, id: &str, name: &str) -> Vec<u8> {
@@ -130,6 +133,8 @@ mod tests {
             vec![],
             vec![1, 0],
             msg(1, 0, "md5.hmca", ""),
+            msg(1, 0, "enc-null.encrypt", ""),
+            msg(2, 0, "enc-null.encrypt", "Radius.PacketAuth"),
             msg(1, 1, "md5.digest", ""),
             msg(1, 0, "md5.digest", "Extra.Name"),
             msg(2, 0, "md5.hmac", ""),

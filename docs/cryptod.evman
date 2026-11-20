@@ -154,7 +154,7 @@ field: outcome.reason                       required
   - `invalid-algorithms`: an exception's `Algorithms` isn't a
     REG_MULTI_SZ.
   - `invalid-program-security`: an exception's `ProgramSecurity` is
-    absent, isn't a security descriptor, or has no DACL.
+    absent, isn't a security descriptor, or has no owner or no DACL.
   - `write-failed`: cryptod couldn't write a copy of the policy.
   - `copy-unreadable`: a process couldn't read a copy.
   - `copy-insecure`: a process refused a copy that someone other than

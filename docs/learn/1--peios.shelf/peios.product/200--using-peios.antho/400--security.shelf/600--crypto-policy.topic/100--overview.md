@@ -44,9 +44,10 @@ HMAC-SHA-1, and doesn't approve some A-grade ones.
 and whether FIPS approves it.
 
 A few entries are on the **floor**: they're refused under every policy, and
-no exception can allow them. The floor holds the null ciphers, the 40-bit
-export-grade RC2 cipher, and RSA keys and Diffie-Hellman parameters under
-1024 bits.
+no exception can allow them. The floor holds ciphers and TLS suites that
+encrypt nothing, the 40-bit export-grade RC2 cipher, RSA keys and
+Diffie-Hellman parameters under 1024 bits, and ECDSA signing with a fixed
+nonce, which gives away the private key.
 
 ## Thresholds
 

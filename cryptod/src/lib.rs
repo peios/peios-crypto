@@ -58,10 +58,17 @@ pub fn posture_sddl() -> String {
     format!("D:P(A;;FA;;;SY)(A;;FA;;;{SID})(A;;0x12019f;;;BA)")
 }
 
-/// Checks an exception's `ProgramSecurity`: it must be a self-relative SD,
-/// with a DACL, as a NULL or absent one would let every program use it.
+/// Checks an exception's `ProgramSecurity`: it must be a self-relative SD
+/// with an owner, as an access check refuses a descriptor without one, so
+/// no program could use the exception; and with a DACL, as a NULL or
+/// absent one would let every program use it.
 pub fn check_program_security(sd: &[u8]) -> Result<(), String> {
     let view = SdView::parse(sd).map_err(|e| format!("not a security descriptor ({e})"))?;
+    if view.owner().is_none() {
+        return Err("it has no owner, which an access check refuses, so no program could use \
+                    the exception; give it O:SY"
+            .into());
+    }
     match view.dacl() {
         Some(_) => Ok(()),
         None => Err("it has no DACL, so every program could use the exception".into()),
@@ -80,11 +87,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn program_security_needs_a_dacl() {
+    fn program_security_needs_an_owner_and_a_dacl() {
         let open = parse_sddl("O:SYG:SY").unwrap();
         assert!(check_program_security(&open).is_err());
         let granted = parse_sddl("O:SYG:SYD:(A;;0x1;;;S-1-5-80-1-2-3-4-5)").unwrap();
         assert!(check_program_security(&granted).is_ok());
+        let ownerless = parse_sddl("D:(A;;0x1;;;S-1-5-80-1-2-3-4-5)").unwrap();
+        assert!(check_program_security(&ownerless).is_err(), "an access check refuses it");
         assert!(check_program_security(b"junk").is_err());
         assert!(parse_sddl("D:(A;;").is_err());
     }
