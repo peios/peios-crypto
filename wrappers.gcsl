@@ -135,6 +135,7 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
          ln -s libpcrypto.so.1 $D/lib/libcrypto.so; ln -s libpssl.so.1 $D/lib/libssl.so; \
          cp -R {REFERENCE}/include/openssl $D/include/; \
          cp {BINDINGS} $D/share/rust/aws_lc_bindings.rs; \
+         mkdir -p $D/share/peios-crypto; cp gen/algorithms.tsv $D/share/peios-crypto/algorithms.tsv; \
          {pc("libcrypto", "The Peios OpenSSL-compatible cryptography library", "", "-lpcrypto", "-lpeios")}; \
          {pc("libssl", "The Peios OpenSSL-compatible TLS library", "Requires.private: libcrypto", "-lpssl")}; \
          {pc("openssl", "The Peios OpenSSL-compatible libraries", "Requires: libssl libcrypto", "")}",
