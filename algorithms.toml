@@ -900,23 +900,33 @@ operations.kdf = { grade = "U", fips = false }
 
 # PKCS #12's own password-based encryption, RFC 7292 appendix C, keyed with
 # SHA-1. PBES2's schemes are graded by their cipher, and PBKDF2's entry.
+#
+# Decrypting with them is U, not the floor: OpenSSL before 3.0 and older
+# Windows encrypt a PKCS #12 file's certificates with 40-bit RC2 by
+# default, and those files still have to be read. Reading weakly encrypted
+# data exposes nothing its encryption didn't already; the file's MAC is
+# what protects it.
 
 [[algorithm]]
 id = "pkcs12-pbe-sha1-rc2-40"
 kind = "fixed"
-# RC2 with a 40-bit key: export-grade, on the floor.
+# RC2 with a 40-bit key: export-grade, so encrypting with it is on the
+# floor.
 operations.encrypt = { floor = true }
+operations.decrypt = { grade = "U", fips = false }
 
 [[algorithm]]
 id = "pkcs12-pbe-sha1-rc4-128"
 kind = "fixed"
 operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "U", fips = false }
 
 [[algorithm]]
 id = "pkcs12-pbe-sha1-3des"
 kind = "fixed"
 # Triple DES encryption, as its cipher is graded.
 operations.encrypt = { grade = "U", fips = false }
+operations.decrypt = { grade = "U", fips = false }
 
 # --- Public keys ---------------------------------------------------------
 # By security strength, SP 800-57 Part 1 Rev. 5, Table 2: an RSA or DH

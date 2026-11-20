@@ -177,6 +177,26 @@ int peios_policy_hpke(const struct evp_hpke_kem_st *kem, const struct evp_hpke_k
                       const struct evp_hpke_aead_st *aead, int sender);
 int peios_policy_hpke_kem(const struct evp_hpke_kem_st *kem, enum peios_operation op);
 
+/* Reading data that names its own algorithm (reading.c), checked where
+   AWS-LC decrypts it:
+   - an EncryptedPrivateKeyInfo's password-based encryption scheme;
+   - a PEM block's legacy encryption, from its DEK-Info header;
+   - a PEM read: the block's encryption, checked as AWS-LC asks for its
+     password, just before it decrypts;
+   - a PKCS #7 envelope's content cipher and key transport, for
+     decrypting it with `pkey`, and for PKCS7_dataInit to encrypt it. */
+struct cbs_st;
+struct evp_cipher_info_st;
+struct bio_st;
+struct pkcs7_st;
+int peios_policy_encrypted_private_key(const struct cbs_st *cbs);
+int peios_policy_pem_cipher(const struct evp_cipher_info_st *cipher);
+int peios_policy_pem_bytes_read_bio(unsigned char **pdata, long *plen, char **pnm,
+                                    const char *name, struct bio_st *bp,
+                                    int (*cb)(char *, int, int, void *), void *u);
+int peios_policy_pkcs7_decrypt(const struct pkcs7_st *p7, const struct evp_pkey_st *pkey);
+int peios_policy_pkcs7_data_init(const struct pkcs7_st *p7);
+
 /* Calls that are checked by what they produce or accept, which AWS-LC's
    API gives no way to know first: each calls AWS-LC itself. A generated
    key or parameters policy refuses are freed, as AWS-LC frees them when it
@@ -213,6 +233,9 @@ int peios_tls_peek(struct ssl_st *ssl, void *buf, int num);
 int peios_tls_peek_ex(struct ssl_st *ssl, void *buf, size_t num, size_t *read_bytes);
 int peios_tls_write(struct ssl_st *ssl, const void *buf, int num);
 int peios_tls_write_ex(struct ssl_st *ssl, const void *buf, size_t num, size_t *written);
+
+/* The testing libraries only: refuse grades below `grade`. */
+void peios_policy_testing_reject_below(enum peios_grade grade);
 
 /* Ends the process, for a refused call to `function`, which can't report
    failure: it returns nothing, or nothing its callers check, as with

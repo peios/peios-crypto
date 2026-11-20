@@ -203,15 +203,18 @@ functions = [
 ]
 
 [[group]]
-title = "Verifying signatures inside OCSP and PKCS #7"
-class = "pending"
-reason = "Verifies a signature, or a signer's certificate chain, inside AWS-LC, or runs PKCS #7's encoding or decoding with the algorithms its data names. Governing them needs the signature and chain read from what AWS-LC verified, which these functions don't give back."
+title = "Verifying and making signatures inside X.509, OCSP and PKCS #7"
+class = "forward"
+reason = "Verifies or makes signatures, and verifies certificate chains, through AWS-LC functions in its other source files whose internal hooks check AWS-LC's own calls: ASN1_item_verify, X509_verify_cert, EVP_VerifyInit_ex, EVP_VerifyFinal and EVP_SignFinal. PKCS7_dataFinal signs digests PKCS7_dataInit set up, through BIO_set_md, whose hook checks them too."
 functions = [
+    "NETSCAPE_SPKI_verify",
     "OCSP_basic_verify",
     "OCSP_request_verify",
     "PKCS7_dataFinal",
-    "PKCS7_dataInit",
     "PKCS7_verify",
+    "X509_CRL_verify",
+    "X509_REQ_verify",
+    "X509_verify",
 ]
 
 [[group]]
@@ -355,9 +358,9 @@ functions = [
 ]
 
 [[group]]
-title = "Reading encrypted keys, PKCS #12 files, PKCS #7 envelopes and PEM"
-class = "pending"
-reason = "Decrypts, or checks the MAC of, data whose algorithm the data names: encrypted private keys, PKCS #12 files, PKCS #7 envelopes, and PEM with legacy encryption headers, which any PEM read can carry but only private keys use. Governing it needs the algorithm read from the data before AWS-LC decrypts it."
+title = "Reading encrypted keys, PKCS #12 files and PEM"
+class = "forward"
+reason = "Decrypts, or checks the MAC of, data whose algorithm the data names. AWS-LC does it in functions these call from its other source files, whose internal hooks check AWS-LC's own calls: PEM_bytes_read_bio and PEM_do_header for PEM's legacy encryption, PKCS8_parse_encrypted_private_key for encrypted private keys, and the internal entries pkcs8_pbe_decrypt and pkcs12_key_gen for PKCS #12's encrypted contents and MAC."
 functions = [
     "PEM_read_DSAPrivateKey",
     "PEM_read_ECPrivateKey",
@@ -371,18 +374,14 @@ functions = [
     "PEM_read_bio_PKCS8_PRIV_KEY_INFO",
     "PEM_ASN1_read",
     "PEM_ASN1_read_bio",
-    "PEM_bytes_read_bio",
-    "PEM_do_header",
     "PEM_X509_INFO_read",
     "PEM_X509_INFO_read_bio",
     "d2i_PKCS8PrivateKey_bio",
     "d2i_PKCS8PrivateKey_fp",
-    "PKCS7_decrypt",
     "PKCS12_get_key_and_certs",
     "PKCS12_parse",
     "PKCS12_verify_mac",
     "PKCS8_decrypt",
-    "PKCS8_parse_encrypted_private_key",
 ]
 
 [[group]]
@@ -736,7 +735,7 @@ functions = [
 [[group]]
 title = "asn1.h: building, encoding and inspecting objects"
 class = "forward"
-reason = "Builds, parses, encodes, prints or inspects objects. Their signing, verifying, digests and encryption are pending."
+reason = "Builds, parses, encodes, prints or inspects objects. Any signing, verifying, digest or encryption they do is checked where AWS-LC does it."
 functions = [
     "ASN1_BIT_STRING_check",
     "ASN1_BIT_STRING_free",
@@ -2060,7 +2059,7 @@ functions = [
 [[group]]
 title = "ocsp.h: building, encoding and inspecting objects"
 class = "forward"
-reason = "Builds, parses, encodes, prints or inspects objects. Their signing, verifying, digests and encryption are pending."
+reason = "Builds, parses, encodes, prints or inspects objects. Any signing, verifying, digest or encryption they do is checked where AWS-LC does it."
 functions = [
     "OCSP_BASICRESP_delete_ext",
     "OCSP_BASICRESP_free",
@@ -2141,7 +2140,7 @@ functions = [
 [[group]]
 title = "pem.h: building, encoding and inspecting objects"
 class = "forward"
-reason = "Builds, parses, encodes, prints or inspects objects. Their signing, verifying, digests and encryption are pending."
+reason = "Builds, parses, encodes, prints or inspects objects. Any signing, verifying, digest or encryption they do is checked where AWS-LC does it."
 functions = [
     "PEM_X509_INFO_write_bio",
     "PEM_def_callback",
@@ -2205,7 +2204,7 @@ functions = [
 [[group]]
 title = "pkcs7.h: building, encoding and inspecting objects"
 class = "forward"
-reason = "Builds, parses, encodes, prints or inspects objects. Their signing, verifying, digests and encryption are pending."
+reason = "Builds, parses, encodes, prints or inspects objects. Any signing, verifying, digest or encryption they do is checked where AWS-LC does it."
 functions = [
     "PKCS7_RECIP_INFO_free",
     "PKCS7_RECIP_INFO_get0_alg",
@@ -2254,7 +2253,7 @@ functions = [
 [[group]]
 title = "pkcs8.h: building, encoding and inspecting objects"
 class = "forward"
-reason = "Builds, parses, encodes, prints or inspects objects. Their signing, verifying, digests and encryption are pending."
+reason = "Builds, parses, encodes, prints or inspects objects. Any signing, verifying, digest or encryption they do is checked where AWS-LC does it."
 functions = [
     "PKCS12_PBE_add",
     "PKCS12_free",
@@ -2975,7 +2974,7 @@ functions = [
 [[group]]
 title = "x509.h: building, encoding and inspecting objects"
 class = "forward"
-reason = "Builds, parses, encodes, prints or inspects objects. Their signing, verifying, digests and encryption are pending."
+reason = "Builds, parses, encodes, prints or inspects objects. Any signing, verifying, digest or encryption they do is checked where AWS-LC does it."
 functions = [
     "ACCESS_DESCRIPTION_free",
     "ACCESS_DESCRIPTION_new",
@@ -3642,6 +3641,8 @@ function = "BIO_set_md"
 signature = "int BIO_set_md(BIO *b, const EVP_MD *md)"
 policy = "peios_policy_digest(md, PEIOS_OP_DIGEST)"
 failure = "0"
+internal = true
+reason = "PKCS #7 sets up its digests with it."
 
 [[hook]]
 function = "ASN1_digest"
@@ -4095,6 +4096,14 @@ policy = "pbe_nid == -1 ? (peios_policy_cipher(cipher, PEIOS_OP_ENCRYPT) && peio
 failure = "0"
 
 [[hook]]
+function = "PKCS8_parse_encrypted_private_key"
+signature = "EVP_PKEY *PKCS8_parse_encrypted_private_key(CBS *cbs, const char *pass, size_t pass_len)"
+policy = "peios_policy_encrypted_private_key(cbs)"
+failure = "NULL"
+internal = true
+reason = "PKCS8_decrypt, and PKCS #12's shrouded key bags, decrypt keys with it."
+
+[[hook]]
 function = "PKCS12_create"
 signature = "PKCS12 *PKCS12_create(const char *password, const char *name, const EVP_PKEY *pkey, X509 *cert, const struct stack_st_X509 *chain, int key_nid, int cert_nid, int iterations, int mac_iterations, int key_type)"
 policy = "peios_policy_pkcs12_pbe(key_nid == 0 ? NID_pbe_WithSHA1And3_Key_TripleDES_CBC : key_nid) && peios_policy_pkcs12_pbe(cert_nid == 0 ? NID_pbe_WithSHA1And40BitRC2_CBC : cert_nid) && peios_policy_algorithm(@sha1.hmac)"
@@ -4135,6 +4144,8 @@ function = "EVP_PKEY_decrypt"
 signature = "int EVP_PKEY_decrypt(EVP_PKEY_CTX *ctx, uint8_t *out, size_t *out_len, const uint8_t *in, size_t in_len)"
 policy = "peios_policy_pkey_ctx(ctx, PEIOS_OP_DECRYPT)"
 failure = "0"
+internal = true
+reason = "PKCS #7 decrypts its recipients' content keys with it."
 
 [[hook]]
 function = "EVP_PKEY_derive"
@@ -4159,6 +4170,8 @@ function = "EVP_PKEY_encrypt"
 signature = "int EVP_PKEY_encrypt(EVP_PKEY_CTX *ctx, uint8_t *out, size_t *out_len, const uint8_t *in, size_t in_len)"
 policy = "peios_policy_pkey_ctx(ctx, PEIOS_OP_ENCRYPT)"
 failure = "0"
+internal = true
+reason = "PKCS #7 encrypts its recipients' content keys with it."
 
 [[hook]]
 function = "EVP_PKEY_keygen"
@@ -4198,6 +4211,8 @@ function = "EVP_SignFinal"
 signature = "int EVP_SignFinal(const EVP_MD_CTX *ctx, uint8_t *sig, unsigned int *out_sig_len, EVP_PKEY *pkey)"
 policy = "peios_policy_pkey_md(pkey, EVP_MD_CTX_md(ctx), PEIOS_OP_SIGN)"
 failure = "0"
+internal = true
+reason = "PKCS #7 signs with it."
 
 [[hook]]
 function = "EVP_SignInit"
@@ -4216,6 +4231,8 @@ function = "EVP_VerifyFinal"
 signature = "int EVP_VerifyFinal(EVP_MD_CTX *ctx, const uint8_t *sig, size_t sig_len, EVP_PKEY *pkey)"
 policy = "peios_policy_pkey_md(pkey, EVP_MD_CTX_md(ctx), PEIOS_OP_VERIFY)"
 failure = "0"
+internal = true
+reason = "PKCS #7 verifies its signers' signatures with it."
 
 [[hook]]
 function = "EVP_VerifyInit"
@@ -4228,6 +4245,8 @@ function = "EVP_VerifyInit_ex"
 signature = "int EVP_VerifyInit_ex(EVP_MD_CTX *ctx, const EVP_MD *type, ENGINE *impl)"
 policy = "peios_policy_digest(type, PEIOS_OP_DIGEST)"
 failure = "0"
+internal = true
+reason = "PKCS #7 verifies its signers' signed attributes with it."
 
 [[hook]]
 function = "ED25519_keypair"
@@ -4660,17 +4679,13 @@ function = "ASN1_item_verify"
 signature = "int ASN1_item_verify(const ASN1_ITEM *it, const X509_ALGOR *algor1, const ASN1_BIT_STRING *signature, void *data, EVP_PKEY *pkey)"
 policy = "peios_policy_algor(algor1, pkey, PEIOS_OP_VERIFY)"
 failure = "0"
+internal = true
+reason = "X.509's, OCSP's and CRLs' signatures are verified with it."
 
 [[hook]]
 function = "NETSCAPE_SPKI_sign"
 signature = "int NETSCAPE_SPKI_sign(NETSCAPE_SPKI *spki, EVP_PKEY *pkey, const EVP_MD *md)"
 policy = "peios_policy_pkey_md(pkey, md, PEIOS_OP_SIGN)"
-failure = "0"
-
-[[hook]]
-function = "NETSCAPE_SPKI_verify"
-signature = "int NETSCAPE_SPKI_verify(NETSCAPE_SPKI *spki, EVP_PKEY *pkey)"
-policy = "peios_policy_algor(spki != NULL ? spki->sig_algor : NULL, pkey, PEIOS_OP_VERIFY)"
 failure = "0"
 
 [[hook]]
@@ -4692,27 +4707,11 @@ policy = "peios_policy_pkey_md(pkey, md, PEIOS_OP_SIGN)"
 failure = "0"
 
 [[hook]]
-function = "X509_verify"
-signature = "int X509_verify(X509 *x509, EVP_PKEY *pkey)"
-policy = "peios_policy_signature(X509_get_signature_nid(x509), pkey, PEIOS_OP_VERIFY)"
-failure = "0"
-
-[[hook]]
-function = "X509_REQ_verify"
-signature = "int X509_REQ_verify(X509_REQ *req, EVP_PKEY *pkey)"
-policy = "peios_policy_signature(X509_REQ_get_signature_nid(req), pkey, PEIOS_OP_VERIFY)"
-failure = "0"
-
-[[hook]]
-function = "X509_CRL_verify"
-signature = "int X509_CRL_verify(X509_CRL *crl, EVP_PKEY *pkey)"
-policy = "peios_policy_signature(X509_CRL_get_signature_nid(crl), pkey, PEIOS_OP_VERIFY)"
-failure = "0"
-
-[[hook]]
 function = "X509_verify_cert"
 signature = "int X509_verify_cert(X509_STORE_CTX *ctx)"
 wrap = "peios_policy_verify_cert"
+internal = true
+reason = "OCSP's and PKCS #7's verification build and verify chains with it."
 
 [[hook]]
 function = "OCSP_basic_sign"
@@ -4762,6 +4761,18 @@ signature = "PKCS7 *PKCS7_encrypt(struct stack_st_X509 *certs, BIO *in, const EV
 policy = "peios_policy_cipher(cipher, PEIOS_OP_ENCRYPT) && peios_policy_key_transport_certs(certs)"
 failure = "NULL"
 
+[[hook]]
+function = "PKCS7_dataInit"
+signature = "BIO *PKCS7_dataInit(PKCS7 *p7, BIO *bio)"
+policy = "peios_policy_pkcs7_data_init(p7)"
+failure = "NULL"
+
+[[hook]]
+function = "PKCS7_decrypt"
+signature = "int PKCS7_decrypt(PKCS7 *p7, EVP_PKEY *pkey, X509 *cert, BIO *data, int flags)"
+policy = "peios_policy_pkcs7_decrypt(p7, pkey)"
+failure = "0"
+
 # PEM. Its legacy encryption derives the key with EVP_BytesToKey, checked as
 # that KDF and the cipher; PKCS #8 PEM is checked as PKCS8_encrypt is: PBES2
 # with the cipher, PBKDF2 and HMAC-SHA-1, or PKCS #12's scheme by its NID.
@@ -4807,6 +4818,21 @@ function = "PEM_write_bio_PrivateKey"
 signature = "int PEM_write_bio_PrivateKey(BIO *bp, EVP_PKEY *x, const EVP_CIPHER *enc, const unsigned char *pass, int pass_len, pem_password_cb *cb, void *u)"
 policy = "enc == NULL || (peios_policy_cipher(enc, PEIOS_OP_ENCRYPT) && peios_policy_algorithm(@evp-bytestokey.kdf))"
 failure = "0"
+
+[[hook]]
+function = "PEM_bytes_read_bio"
+signature = "int PEM_bytes_read_bio(unsigned char **pdata, long *plen, char **pnm, const char *name, BIO *bp, pem_password_cb *cb, void *u)"
+wrap = "peios_policy_pem_bytes_read_bio"
+internal = true
+reason = "Every typed PEM read reads its block with it, decrypting a legacy-encrypted one."
+
+[[hook]]
+function = "PEM_do_header"
+signature = "int PEM_do_header(EVP_CIPHER_INFO *cipher, unsigned char *data, long *len, pem_password_cb *callback, void *u)"
+policy = "peios_policy_pem_cipher(cipher)"
+failure = "0"
+internal = true
+reason = "PEM_X509_INFO_read_bio decrypts legacy-encrypted certificates and CRLs with it."
 
 [[hook]]
 function = "PEM_write_bio_RSAPrivateKey"
@@ -4927,3 +4953,15 @@ wrap = "peios_tls_write"
 function = "SSL_write_ex"
 signature = "int SSL_write_ex(SSL *s, const void *buf, size_t num, size_t *written)"
 wrap = "peios_tls_write_ex"
+
+# Functions outside AWS-LC's API that libpcrypto is linked to wrap, so that
+# AWS-LC's calls to them from its other source files are checked. Their
+# wraps are in runtime/reading.c.
+
+[[internal]]
+symbol = "pkcs8_pbe_decrypt"
+reason = "PKCS #12's encrypted contents are decrypted with it, with the scheme they name."
+
+[[internal]]
+symbol = "pkcs12_key_gen"
+reason = "PKCS #12's MAC is keyed with it, with the digest the file names."

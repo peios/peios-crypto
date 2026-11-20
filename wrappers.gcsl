@@ -3,7 +3,7 @@
 # their public functions by its OpenSSL name, and AWS-LC's headers with its
 # pkg-config names, `libcrypto`, `libssl` and `openssl`. The forwarders and
 # version scripts are generated from the archives' own symbol tables by
-# `generate-forwarders.sh`, so every function AWS-LC's API has is
+# `generate.py`, so every function AWS-LC's API has is
 # forwarded, and the build fails on any symbol it can't classify.
 #
 # `libcrypto.so` and `libssl.so` link to the wrappers, so that a build
@@ -38,6 +38,10 @@ let RUNTIME = "/work/runtime"
 let PYTHON = "/opt/python"
 
 let BINDINGS = "/work/aws_lc_bindings.rs"
+
+# AWS-LC's source, whose internal headers declare the functions outside its
+# API that the runtime wraps, so that a changed declaration fails the build.
+let AWSLC_SOURCE = "/opt/awslc-source"
 
 # How the generated hooks and the policy runtime are compiled.
 let OWN_CFLAGS = "-O2 -fPIC -fcf-protection=full -Wall -Wextra -Werror"
@@ -97,18 +101,24 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
          $CC {OWN_CFLAGS} -I{REFERENCE}/include -I{RUNTIME} -c gen/$lib-hooks.c -o gen/$lib-hooks.o; \
          done; \
          $CC {OWN_CFLAGS} -Iinclude -I{RUNTIME} -Igen -c {RUNTIME}/policy.c -o gen/policy.o; \
+         $CC {OWN_CFLAGS} -DPEIOS_TESTING -Iinclude -I{RUNTIME} -Igen -c {RUNTIME}/policy.c \
+         -o gen/policy-testing.o; \
          $CC {OWN_CFLAGS} -I{RUNTIME} -c {RUNTIME}/decision.c -o gen/decision.o; \
          $CC {OWN_CFLAGS} -Iinclude -I{RUNTIME} -c gen/policy-table.c -o gen/policy-table.o; \
          $CC {OWN_CFLAGS} -I{REFERENCE}/include -I{RUNTIME} -Igen -c {RUNTIME}/tls.c -o gen/tls.o; \
+         $CC {OWN_CFLAGS} -Iinclude -I{RUNTIME} -Igen -I{AWSLC_SOURCE} -c {RUNTIME}/reading.c \
+         -o gen/reading.o; \
          begin=$($CC -print-file-name=crtbeginS.o); end=$($CC -print-file-name=crtendS.o); \
          for variant in dist testing; do \
          if [ $variant = dist ]; then maps=; out=$D/lib; else maps=-testing; out=$T/lib; fi; \
+         if [ $variant = dist ]; then policy=gen/policy.o; else policy=gen/policy-testing.o; fi; \
          $CC {LINK} -Wl,-soname,libpcrypto.so.1 -o $out/libpcrypto.so.1 \"$begin\" \
-         gen/crypto-forwarders.o gen/crypto-hooks.o gen/policy.o gen/decision.o gen/policy-table.o \
-         -Wl,--whole-archive lib/libcrypto.a -Wl,--no-whole-archive \
+         gen/crypto-forwarders.o gen/crypto-hooks.o $policy gen/decision.o gen/policy-table.o \
+         gen/reading.o @gen/crypto-wraps.rsp -Wl,--whole-archive lib/libcrypto.a -Wl,--no-whole-archive \
          -Wl,--version-script=gen/crypto$maps.map -lpthread \"$end\"; \
          $CXX {LINK} -Wl,-soname,libpssl.so.1 -o $out/libpssl.so.1 \"$begin\" \
-         gen/ssl-forwarders.o gen/ssl-hooks.o gen/tls.o -Wl,--whole-archive lib/libssl.a -Wl,--no-whole-archive \
+         gen/ssl-forwarders.o gen/ssl-hooks.o gen/tls.o @gen/ssl-wraps.rsp \
+         -Wl,--whole-archive lib/libssl.a -Wl,--no-whole-archive \
          -Wl,--version-script=gen/ssl$maps.map -L$out -l:libpcrypto.so.1 -lpthread \"$end\"; \
          done; \
          ln -s libpcrypto.so.1 $D/lib/libpcrypto.so; ln -s libpssl.so.1 $D/lib/libpssl.so; \
@@ -127,6 +137,7 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
             {at = RUNTIME; place = dir("runtime")},
             {at = PYTHON; place = python.root},
             {at = BINDINGS; place = build awslc_rust_bindings()},
+            {at = AWSLC_SOURCE; place = build awslc_source()},
         ],
     )
 }

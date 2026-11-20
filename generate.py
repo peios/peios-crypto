@@ -29,6 +29,13 @@ Every public export must be classified by BINDINGS exactly once, as
 `forward`, `pending` or a hook, and every digest and cipher the public
 headers offer must be graded by ALGORITHMS. The generator fails otherwise,
 and on any symbol it can't place.
+
+A hook marked `internal` also governs AWS-LC's calls to the function from
+its other source files: the hook is generated as `__wrap_PREFIX_X`, the
+library is linked with `--wrap=PREFIX_X`, written to `LIB-wraps.rsp`,
+and X is exported by a forwarder, whose jump the wrap catches too.
+BINDINGS' `internal` entries do the same for functions outside the API,
+whose wraps the runtime defines.
 """
 
 import re
@@ -153,6 +160,8 @@ def classify(bindings, public_names):
             classes[name] = group["class"]
     for hook in bindings.get("hook", []):
         name = hook["function"]
+        if hook.get("internal") and not hook.get("reason"):
+            fail(f"internal hook {name} gives no reason")
         if name in classes:
             fail(f"{name} is hooked and classified as {classes[name]}")
         needed = ("signature", "wrap") if "wrap" in hook else ("signature", "policy", "failure")
@@ -300,12 +309,18 @@ def hooks_source(hooks, prefix, headers, index):
     for name, hook in sorted(hooks.items()):
         names = parameters(hook["signature"], name)
         returns_void = re.match(r"\s*void\s+[A-Za-z_]", hook["signature"]) is not None
+        signature, real = hook["signature"].strip(), f"{prefix}_{name}"
+        if hook.get("internal"):
+            # The wrap the linker substitutes for AWS-LC's own function,
+            # which it then reaches by its `__real_` name.
+            signature = re.sub(rf"\b{name}(\s*\()", rf"__wrap_{prefix}_{name}\1", signature, count=1)
+            real = f"__real_{prefix}_{name}"
         if "wrap" in hook:
             # The runtime makes the whole call, deciding by what AWS-LC
             # produces or accepts.
             call = f"{hook['wrap']}({', '.join(names)});"
             out += [
-                f"{hook['signature'].strip()} {{",
+                f"{signature} {{",
                 f"    {call}" if returns_void else f"    return {call}",
                 "}",
                 "",
@@ -318,11 +333,11 @@ def hooks_source(hooks, prefix, headers, index):
             refuse = f'        peios_policy_abort("{name}");'
         else:
             refuse = f"        return {failure};"
-        call = f"{prefix}_{name}({', '.join(names)});"
+        call = f"{real}({', '.join(names)});"
         out += [
-            f"extern __typeof__({name}) {prefix}_{name};",
+            f"extern __typeof__({name}) {real};",
             "",
-            f"{hook['signature'].strip()} {{",
+            f"{signature} {{",
             f"    if (!({policy_expression(hook, name, index)})) {{",
             refuse,
             "    }",
@@ -388,13 +403,37 @@ def main():
         "   headers that has to call AWS-LC rather than its own hook. */",
         f"#define PEIOS_REAL(name) {prefix}_##name",
         "",
+        "/* AWS-LC's own function `name`, for runtime code an internal hook",
+        "   calls: under the linker's wrap, PEIOS_REAL(name) is the hook. */",
+        f"#define PEIOS_INNER(name) __real_{prefix}_##name",
+        "",
+        "/* The wrap the runtime defines for AWS-LC's function `name`. */",
+        f"#define PEIOS_WRAP(name) __wrap_{prefix}_##name",
+        "",
     ]))
     for lib, (entries, _, _) in libs.items():
         own = {n: h for n, h in hooks.items() if any(name == n for _, _, _, name in entries)}
         (out / f"{lib}-hooks.c").write_text(hooks_source(own, prefix, headers, index))
 
+    # An internal hook's function is forwarded, and the linker wraps it.
+    outer = {n: h for n, h in hooks.items() if not h.get("internal")}
     for lib, (entries, _, _) in libs.items():
-        (out / f"{lib}-forwarders.S").write_text(forwarders(entries, hooks, prefix))
+        (out / f"{lib}-forwarders.S").write_text(forwarders(entries, outer, prefix))
+
+    internals = bindings.get("internal", [])
+    for entry in internals:
+        symbol = entry.get("symbol", "")
+        if not entry.get("reason"):
+            fail(f"internal {symbol} gives no reason")
+        if f"{prefix}_{symbol}" not in libs["crypto"][2] or symbol in public_names:
+            fail(f"internal {symbol} isn't a function libcrypto's archive defines outside its API")
+    for lib, (entries, _, _) in libs.items():
+        wrapped = sorted(n for n in hooks.keys() - outer.keys()
+                         if any(name == n for _, _, _, name in entries))
+        if lib == "crypto":
+            wrapped += sorted(e["symbol"] for e in internals)
+        (out / f"{lib}-wraps.rsp").write_text(
+            "".join(f"-Wl,--wrap={prefix}_{n}\n" for n in wrapped))
 
     crypto_entries = libs["crypto"][0]
     _, ssl_used, ssl_defined = libs["ssl"]

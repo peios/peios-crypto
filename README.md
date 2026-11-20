@@ -12,7 +12,9 @@
 - The generator, `generate.py`, and the data it reads:
   - `bindings.toml` classifies every function AWS-LC's API offers as
     forwarded unchanged, hooked, or pending a hook, and the build fails on
-    any it misses.
+    any it misses. An internal hook also checks AWS-LC's own calls to its
+    function from AWS-LC's other source files, through the linker's
+    `--wrap`.
   - `algorithms.toml` grades each algorithm and operation the hooks
     govern.
 - The policy runtime, in `runtime/`, which the hooks ask.

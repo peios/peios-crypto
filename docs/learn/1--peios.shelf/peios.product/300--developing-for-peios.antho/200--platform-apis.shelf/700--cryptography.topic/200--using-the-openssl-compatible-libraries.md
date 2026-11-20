@@ -29,13 +29,17 @@ see [Using Cryptography from Rust](~peios/cryptography/using-cryptography-from-r
 - Expect Peios crypto policy to apply to these libraries' callers. The
   current libraries apply it when a program computes a digest or a MAC
   (HMAC, CMAC, Poly1305, or SipHash), starts or keys a cipher or an AEAD,
-  derives a key, encrypts a private key or PKCS #12 file, generates or
-  uses a public key, or finishes a TLS handshake. They enforce only the
-  policy's floor, which no machine can loosen: the null ciphers, the
-  40-bit export-grade RC2 cipher, and RSA keys and Diffie-Hellman
-  parameters under 1024 bits. A few calls still go straight to AWS-LC,
-  most of them ones that decrypt data whose algorithm the data itself
-  names, such as an encrypted PKCS #12 file.
+  derives a key, encrypts or decrypts a private key, PEM file, PKCS #12
+  file or PKCS #7 message, generates or uses a public key, verifies a
+  signature in a certificate, OCSP response or PKCS #7 message, or
+  finishes a TLS handshake. Data that names its own algorithm, such as an
+  encrypted PKCS #12 file, is checked as it's read, before it's
+  decrypted. The libraries enforce only the policy's floor, which no
+  machine can loosen: the null ciphers, the 40-bit export-grade RC2
+  cipher, and RSA keys and Diffie-Hellman parameters under 1024 bits.
+  Two calls still go straight to AWS-LC: `EVP_CIPHER_CTX_set_key_length`
+  and `EVP_CIPHER_CTX_ctrl`, which can change a cipher's key length or
+  parameters after the cipher was checked.
 - Expect TLS to be checked once each handshake has negotiated, before any
   data is sent or received on it: its version, cipher suite, key-exchange
   group, keys, signatures, and the peer's certificate chain. If policy
@@ -127,7 +131,8 @@ not all of OpenSSL 3. Expect to change a program that needs:
 - **`PKCS12_create`'s defaults.** AWS-LC encrypts a PKCS #12 file's
   certificates with 40-bit RC2 unless told otherwise, and Peios crypto
   policy refuses it. Pass -1 as `cert_nid` to leave the certificates,
-  which are public, unencrypted.
+  which are public, unencrypted. Files that other software encrypted
+  this way still read.
 
 AWS-LC's porting documents, in its repository's `docs/porting` directory,
 list the functions it leaves out and those that behave differently.

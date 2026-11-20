@@ -254,6 +254,31 @@ def test policy_hooks(
     )
 }
 
+# Data that names its own algorithm is checked where AWS-LC decrypts it,
+# verifies it or keys its MAC, inside AWS-LC's own calls, against the
+# testing libpcrypto, which lets the test refuse more than the floor: none
+# of what it reads is on the floor.
+def test reading_policy(
+    pcrypto: Dir = build pcrypto(),
+    testing: Dir = build pcrypto_testing(),
+    source: File = file("tests/reading_policy.c"),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let ran = checked(
+        "cd /tmp; \"$CC\" -Wall -Werror -Wno-deprecated-declarations -I{PCRYPTO}/include \
+         -o reading_policy /work/reading_policy.c -L{TESTING}/lib -l:libpcrypto.so.1; \
+         LD_LIBRARY_PATH={TESTING}/lib ./reading_policy",
+        [
+            {at = PCRYPTO; place = pcrypto},
+            {at = TESTING; place = testing},
+            {at = "/work/reading_policy.c"; place = source},
+        ],
+        c = c,
+        env = env,
+    )
+}
+
 # libpssl's handshakes are checked once finished: one with a P-256
 # certificate completes and carries data, and one whose server has a
 # 512-bit RSA key fails with Peios's error and stays failed.

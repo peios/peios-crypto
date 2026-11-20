@@ -68,6 +68,15 @@ expect("a hooked function also classified",
 expect("a group with no reason",
        changed(bindings, 'reason = "', 'reason = "" # "'), algorithms,
        "gives no reason")
+expect("an internal hook with no reason",
+       changed(bindings, 'internal = true\nreason = "', 'internal = true\nreasons = "'), algorithms,
+       "gives no reason")
+expect("an internal entry AWS-LC doesn't define",
+       changed(bindings, 'symbol = "pkcs12_key_gen"', 'symbol = "not_an_awslc_internal"'),
+       algorithms, "isn't a function libcrypto's archive defines outside its API")
+expect("an internal entry in AWS-LC's API",
+       changed(bindings, 'symbol = "pkcs12_key_gen"', 'symbol = "EVP_DigestUpdate"'),
+       algorithms, "isn't a function libcrypto's archive defines outside its API")
 expect("a digest left ungraded",
        bindings, changed(algorithms, 'getter = "EVP_md5"\n', 'getter = "EVP_md5_gone"\n'),
        "doesn't grade these digests")
