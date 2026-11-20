@@ -187,13 +187,15 @@ static int negotiated_ok(const SSL *ssl) {
            keys_ok(ssl) && srtp_ok(ssl);
 }
 
-/* Whether `ssl` may carry on: checks a handshake once it's finished, once,
-   and remembers what policy decided. A connection that can't keep its
-   state is checked every time. */
+/* Whether `ssl` may carry on: checks a handshake once it has negotiated,
+   once, and remembers what policy decided. That's once it's finished, or
+   in False Start, when the client sends data before the server's Finished
+   but everything policy checks is already known. A connection that can't
+   keep its state is checked every time. */
 static int allowed(SSL *ssl) {
     pthread_once(&ex_once, make_ex_index);
     uintptr_t state = ex_index >= 0 ? (uintptr_t)SSL_get_ex_data(ssl, ex_index) : 0;
-    if (SSL_in_init(ssl) || !SSL_is_init_finished(ssl)) {
+    if (!SSL_is_init_finished(ssl) && !SSL_in_false_start(ssl)) {
         return !(state & 1);
     }
     uintptr_t handshake = (uintptr_t)SSL_total_renegotiations(ssl) + 1;
@@ -248,50 +250,93 @@ int peios_tls_accept(SSL *ssl) {
     return ssl != NULL && !allowed(ssl) ? -1 : ret;
 }
 
-int peios_tls_read(SSL *ssl, void *buf, int num) {
+/* Whether a read, peek or write may carry data. AWS-LC's own would run a
+   pending handshake and carry data in the same call, before policy could
+   see what the handshake negotiated, so a pending handshake is run first,
+   by AWS-LC's SSL_do_handshake, and checked. As AWS-LC's own do, it's left
+   to finish in False Start, once data may flow, and in TLS 1.3's early
+   data, which flows before the handshake has negotiated anything policy
+   could check. If it hasn't finished, the call fails as AWS-LC's own
+   would, SSL_get_error telling the caller whether to retry. */
+static int may_carry_data(SSL *ssl, int *result) {
+    if (ssl == NULL) {
+        return 1;
+    }
     if (refused_before(ssl)) {
-        return -1;
+        *result = -1;
+        return 0;
+    }
+    if (SSL_in_init(ssl) && !SSL_in_false_start(ssl) && !SSL_in_early_data(ssl)) {
+        int ret = PEIOS_REAL(SSL_do_handshake)(ssl);
+        if (ret == 0) {
+            ERR_put_error(ERR_LIB_SSL, 0, SSL_R_SSL_HANDSHAKE_FAILURE, __FILE__, __LINE__);
+            ret = -1;
+        }
+        if (ret != 1) {
+            *result = ret;
+            return 0;
+        }
+    }
+    if (!allowed(ssl)) {
+        *result = -1;
+        return 0;
+    }
+    return 1;
+}
+
+/* After a read, peek or write: a renegotiation it ran is checked too. */
+#define AFTER_DATA(ssl, ret, refused) ((ssl) != NULL && !allowed(ssl) ? (refused) : (ret))
+
+int peios_tls_read(SSL *ssl, void *buf, int num) {
+    int result;
+    if (!may_carry_data(ssl, &result)) {
+        return result;
     }
     int ret = PEIOS_REAL(SSL_read)(ssl, buf, num);
-    return ssl != NULL && !allowed(ssl) ? -1 : ret;
+    return AFTER_DATA(ssl, ret, -1);
 }
 
 int peios_tls_read_ex(SSL *ssl, void *buf, size_t num, size_t *read_bytes) {
-    if (refused_before(ssl)) {
+    int result;
+    if (!may_carry_data(ssl, &result)) {
         return 0;
     }
     int ret = PEIOS_REAL(SSL_read_ex)(ssl, buf, num, read_bytes);
-    return ssl != NULL && !allowed(ssl) ? 0 : ret;
+    return AFTER_DATA(ssl, ret, 0);
 }
 
 int peios_tls_peek(SSL *ssl, void *buf, int num) {
-    if (refused_before(ssl)) {
-        return -1;
+    int result;
+    if (!may_carry_data(ssl, &result)) {
+        return result;
     }
     int ret = PEIOS_REAL(SSL_peek)(ssl, buf, num);
-    return ssl != NULL && !allowed(ssl) ? -1 : ret;
+    return AFTER_DATA(ssl, ret, -1);
 }
 
 int peios_tls_peek_ex(SSL *ssl, void *buf, size_t num, size_t *read_bytes) {
-    if (refused_before(ssl)) {
+    int result;
+    if (!may_carry_data(ssl, &result)) {
         return 0;
     }
     int ret = PEIOS_REAL(SSL_peek_ex)(ssl, buf, num, read_bytes);
-    return ssl != NULL && !allowed(ssl) ? 0 : ret;
+    return AFTER_DATA(ssl, ret, 0);
 }
 
 int peios_tls_write(SSL *ssl, const void *buf, int num) {
-    if (refused_before(ssl)) {
-        return -1;
+    int result;
+    if (!may_carry_data(ssl, &result)) {
+        return result;
     }
     int ret = PEIOS_REAL(SSL_write)(ssl, buf, num);
-    return ssl != NULL && !allowed(ssl) ? -1 : ret;
+    return AFTER_DATA(ssl, ret, -1);
 }
 
 int peios_tls_write_ex(SSL *ssl, const void *buf, size_t num, size_t *written) {
-    if (refused_before(ssl)) {
+    int result;
+    if (!may_carry_data(ssl, &result)) {
         return 0;
     }
     int ret = PEIOS_REAL(SSL_write_ex)(ssl, buf, num, written);
-    return ssl != NULL && !allowed(ssl) ? 0 : ret;
+    return AFTER_DATA(ssl, ret, 0);
 }

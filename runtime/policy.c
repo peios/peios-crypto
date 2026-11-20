@@ -320,19 +320,21 @@ int peios_policy_pkey_ctx(EVP_PKEY_CTX *ctx, enum peios_operation op) {
     }
     int id = EVP_PKEY_id(pkey);
     int rsa = id == EVP_PKEY_RSA || id == EVP_PKEY_RSA_PSS;
+    /* Asking the context what it will do mustn't leave an error behind
+       for a call that succeeds. */
+    ERR_set_mark();
     const EVP_MD *md = NULL;
     if ((op == PEIOS_OP_SIGN || op == PEIOS_OP_VERIFY) &&
         (rsa || id == EVP_PKEY_EC || id == EVP_PKEY_DSA)) {
         EVP_PKEY_CTX_get_signature_md(ctx, &md);
     }
+    int padding;
+    int padded = rsa && EVP_PKEY_CTX_get_rsa_padding(ctx, &padding);
+    ERR_pop_to_mark();
     if (!peios_policy_pkey_md(pkey, md, op)) {
         return 0;
     }
-    int padding;
-    if (rsa && EVP_PKEY_CTX_get_rsa_padding(ctx, &padding)) {
-        return peios_policy_rsa_padding(padding, op);
-    }
-    return 1;
+    return padded ? peios_policy_rsa_padding(padding, op) : 1;
 }
 
 int peios_policy_signature(int sig_nid, const EVP_PKEY *pkey, enum peios_operation op) {

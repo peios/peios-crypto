@@ -228,6 +228,25 @@ int main(void) {
           "EVP_PKEY_keygen kept a 512-bit RSA key");
     check(EVP_PKEY_CTX_set_rsa_keygen_bits(kctx, 2048) && EVP_PKEY_keygen(kctx, &generated),
           "EVP_PKEY_keygen refused a 2048-bit RSA key");
+
+    // A signature policy allows leaves no error behind, with or without a
+    // digest set: checking it asks the context what it will do.
+    const uint8_t to_sign[32] = {0};
+    EVP_PKEY *signers[] = {generated, pkey};
+    for (size_t i = 0; i < 2; i++) {
+        for (int with_md = 0; with_md <= 1; with_md++) {
+            EVP_PKEY_CTX *sctx = EVP_PKEY_CTX_new(signers[i], NULL);
+            uint8_t sig[256];
+            size_t len = sizeof(sig);
+            ERR_clear_error();
+            check(EVP_PKEY_sign_init(sctx) &&
+                      (!with_md || EVP_PKEY_CTX_set_signature_md(sctx, EVP_sha256())) &&
+                      EVP_PKEY_sign(sctx, sig, &len, to_sign, sizeof(to_sign)) &&
+                      ERR_peek_error() == 0,
+                  "an allowed EVP_PKEY_sign failed or left an error behind");
+            EVP_PKEY_CTX_free(sctx);
+        }
+    }
     EVP_PKEY_free(generated);
     EVP_PKEY_CTX_free(kctx);
 

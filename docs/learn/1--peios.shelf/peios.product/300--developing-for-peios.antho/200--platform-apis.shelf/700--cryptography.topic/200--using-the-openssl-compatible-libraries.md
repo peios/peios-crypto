@@ -36,11 +36,15 @@ see [Using Cryptography from Rust](~peios/cryptography/using-cryptography-from-r
   parameters under 1024 bits. A few calls still go straight to AWS-LC,
   most of them ones that decrypt data whose algorithm the data itself
   names, such as an encrypted PKCS #12 file.
-- Expect TLS to be checked once each handshake has finished: its version,
-  cipher suite, key-exchange group, keys, signatures, and the peer's
-  certificate chain. If policy refuses any of them, the connection fails
-  with an `insufficient_security` alert, as if the handshake itself had
-  failed, and every later call on it fails too.
+- Expect TLS to be checked once each handshake has negotiated, before any
+  data is sent or received on it: its version, cipher suite, key-exchange
+  group, keys, signatures, and the peer's certificate chain. If policy
+  refuses any of them, the connection fails with an `insufficient_security`
+  alert, as if the handshake itself had failed, and every later call on it
+  fails too. A call such as `SSL_write` that runs the handshake itself
+  checks it before sending anything. TLS 1.3's early data isn't checked: a
+  client sends it before the handshake negotiates anything, using a
+  session that an earlier handshake negotiated.
 
 ## Build a C program
 
