@@ -80,15 +80,24 @@ fn main() {
             std::process::exit(1);
         }
     };
-    match Token::open_self(true, TokenAccess::QUERY).and_then(|t| t.user()) {
-        Ok(me) if me.to_string() == cryptod::SID => {}
-        Ok(me) => log::error(format_args!(
-            "running as {me}, not cryptod's service SID {}: libpcrypto won't trust the \
-             policy copies this process writes. Its Identity must be Service.",
-            cryptod::SID
-        )),
-        Err(e) => log::warn(format_args!("could not read cryptod's own identity ({e})")),
-    }
+    let own = match Token::open_self(true, TokenAccess::QUERY).and_then(|t| t.user()) {
+        Ok(me) => {
+            if me.to_string() != cryptod::SID {
+                log::error(format_args!(
+                    "running as {me}, not cryptod's service SID {}: libpcrypto won't trust \
+                     the policy copies this process writes. Its Identity must be Service.",
+                    cryptod::SID
+                ));
+            }
+            Some(Peer { sid: me.as_bytes().to_vec(), pid: None })
+        }
+        Err(e) => {
+            log::warn(format_args!(
+                "could not read cryptod's own identity ({e}); its own records name no subject"
+            ));
+            None
+        }
+    };
     let policy = EventPolicy::open()
         .map_err(|e| log::warn(format_args!("could not open the event policy ({e}); standard records are written")))
         .ok();
@@ -96,6 +105,7 @@ fn main() {
 
     let mut service = Service {
         known,
+        own,
         events: policy,
         compiled: Compiled {
             policy: Default::default(),
@@ -140,6 +150,8 @@ fn main() {
 
 struct Service {
     known: Known,
+    /// cryptod's own user, the subject of what it does on its own authority.
+    own: Option<Peer>,
     events: Option<EventPolicy>,
     compiled: Compiled,
     /// The bytes last published, so an unchanged policy isn't again.
@@ -237,7 +249,7 @@ impl Service {
         self.emit(
             events::POLICY_FAILED,
             Tier::Essential,
-            events::policy_failed(reason, detail, exception, None),
+            events::policy_failed(reason, detail, exception, self.own.as_ref()),
         );
     }
 
@@ -291,7 +303,7 @@ impl Service {
             compiled.policy.warn_below.letter(),
             compiled.policy.exceptions.len()
         ));
-        self.emit(events::POLICY_APPLIED, Tier::Standard, events::policy_applied(&compiled));
+        self.emit(events::POLICY_APPLIED, Tier::Standard, events::policy_applied(&compiled, self.own.as_ref()));
         self.published = Some(bytes);
         self.compiled = compiled;
         self.last_failure = None;
@@ -456,14 +468,20 @@ impl Service {
         match report {
             Report::Warned { id } => {
                 self.posture.warned(&peer.sid, &id);
-                self.emit(events::ALGORITHM_WARNED, Tier::Standard, events::algorithm_warned(peer, &id));
+                let grade = self.known.get(&id).and_then(|e| e.grade);
+                self.emit(
+                    events::ALGORITHM_WARNED,
+                    Tier::Standard,
+                    events::algorithm_warned(peer, &id, grade),
+                );
             }
             Report::ExceptionUsed { id, exception } => {
                 self.posture.exception_used(&peer.sid, &id, &exception);
+                let grade = self.known.get(&id).and_then(|e| e.grade);
                 self.emit(
                     events::EXCEPTION_USED,
                     Tier::Essential,
-                    events::exception_used(peer, &id, &exception),
+                    events::exception_used(peer, &id, grade, &exception),
                 );
             }
             Report::PolicyUnusable { problem } => {
@@ -528,7 +546,7 @@ fn peer(fd: BorrowedFd<'_>) -> Option<Peer> {
             &mut len,
         )
     };
-    let pid = if r == 0 { u32::try_from(cred.pid).unwrap_or(0) } else { 0 };
+    let pid = if r == 0 { u32::try_from(cred.pid).ok().filter(|&p| p != 0) } else { None };
     Some(Peer { sid: sid.as_bytes().to_vec(), pid })
 }
 

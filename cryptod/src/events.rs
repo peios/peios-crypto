@@ -12,13 +12,16 @@
 //!   use.
 //!
 //! A process's report names it by the token and pid the kernel captured
-//! when it connected, never by anything in the report.
+//! when it connected, never by anything in the report. What cryptod does
+//! on its own authority names cryptod's own user. The fields are in
+//! `docs/cryptod.evman`.
 
 use std::collections::BTreeMap;
 
 use peios::msgpack::Writer;
 
 use crate::compile::Compiled;
+use crate::policy::Grade;
 
 pub const POLICY_APPLIED: &str = "cryptod.policy.applied";
 pub const POLICY_FAILED: &str = "cryptod.policy.failed";
@@ -81,64 +84,82 @@ pub fn payload(fields: &[(&str, F<'_>)]) -> peios::Result<Vec<u8>> {
     w.to_bytes()
 }
 
-/// Who reported: the user of the token captured at connect, and the pid.
+/// Who acted: for a report, the user of the token the kernel captured when
+/// the process connected, and its pid; for what cryptod does on its own
+/// authority, cryptod's own user, and no pid, as the header names cryptod.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Peer {
     pub sid: Vec<u8>,
-    pub pid: u32,
+    pub pid: Option<u32>,
 }
 
-fn subject<'a>(peer: &'a Peer, fields: &mut Vec<(&'static str, F<'a>)>) {
-    fields.push(("subject.token.sid", F::Bin(&peer.sid)));
-    fields.push(("subject.process.pid", F::Uint(u64::from(peer.pid))));
+fn subject<'a>(peer: Option<&'a Peer>, fields: &mut Vec<(&'static str, F<'a>)>) {
+    if let Some(peer) = peer {
+        fields.push(("subject.token.sid", F::Bin(&peer.sid)));
+        if let Some(pid) = peer.pid {
+            fields.push(("subject.process.pid", F::Uint(u64::from(pid))));
+        }
+    }
 }
 
-pub fn policy_applied(c: &Compiled) -> peios::Result<Vec<u8>> {
+fn algorithm<'a>(id: &'a str, grade: Option<Grade>, fields: &mut Vec<(&'static str, F<'a>)>) {
+    fields.push(("object.crypto-algorithm.id", F::Str(id)));
+    if let Some(g) = grade {
+        fields.push(("object.crypto-algorithm.grade", F::Str(g.letter())));
+    }
+}
+
+/// A policy published. `own` is cryptod's own user, if it could be read.
+pub fn policy_applied(c: &Compiled, own: Option<&Peer>) -> peios::Result<Vec<u8>> {
     let p = &c.policy;
-    payload(&[
-        ("object.crypto.policy.reject-below", F::Str(p.reject_below.letter())),
-        ("object.crypto.policy.warn-below", F::Str(p.warn_below.letter())),
-        ("object.crypto.policy.reject-non-fips", F::Bool(p.reject_non_fips)),
-        ("object.crypto.policy.warn-non-fips", F::Bool(p.warn_non_fips)),
-        ("object.crypto.policy.exceptions-may-reject", F::Bool(p.exceptions_may_reject)),
-        ("object.crypto.policy.exceptions", F::Uint(p.exceptions.len() as u64)),
-        ("object.crypto.policy.defaults", F::Bool(c.defaults)),
-    ])
+    let mut fields = vec![
+        ("object.crypto-policy.reject-below", F::Str(p.reject_below.letter())),
+        ("object.crypto-policy.warn-below", F::Str(p.warn_below.letter())),
+        ("object.crypto-policy.reject-non-fips", F::Bool(p.reject_non_fips)),
+        ("object.crypto-policy.warn-non-fips", F::Bool(p.warn_non_fips)),
+        ("object.crypto-policy.exceptions-may-reject", F::Bool(p.exceptions_may_reject)),
+        ("object.crypto-policy.exception-count", F::Uint(p.exceptions.len() as u64)),
+        ("object.crypto-policy.defaults", F::Bool(c.defaults)),
+    ];
+    subject(own, &mut fields);
+    payload(&fields)
 }
 
 /// A failure: `reason` and `detail`, the exception it concerns, if any, and
-/// the process that reported it, if it was reported.
+/// who acted: the process that reported it, or cryptod.
 pub fn policy_failed(
     reason: &str,
     detail: &str,
     exception: Option<&str>,
-    peer: Option<&Peer>,
+    who: Option<&Peer>,
 ) -> peios::Result<Vec<u8>> {
     let mut fields = vec![("outcome.reason", F::Str(reason))];
     if !detail.is_empty() {
         fields.push(("outcome.detail", F::Str(detail)));
     }
     if let Some(name) = exception {
-        fields.push(("object.crypto.exception", F::Str(name)));
+        fields.push(("object.crypto-exception.name", F::Str(name)));
     }
-    if let Some(peer) = peer {
-        subject(peer, &mut fields);
-    }
+    subject(who, &mut fields);
     payload(&fields)
 }
 
-pub fn algorithm_warned(peer: &Peer, id: &str) -> peios::Result<Vec<u8>> {
-    let mut fields = vec![("object.crypto.algorithm", F::Str(id))];
-    subject(peer, &mut fields);
+pub fn algorithm_warned(peer: &Peer, id: &str, grade: Option<Grade>) -> peios::Result<Vec<u8>> {
+    let mut fields = Vec::new();
+    algorithm(id, grade, &mut fields);
+    subject(Some(peer), &mut fields);
     payload(&fields)
 }
 
-pub fn exception_used(peer: &Peer, id: &str, exception: &str) -> peios::Result<Vec<u8>> {
-    let mut fields = vec![
-        ("object.crypto.algorithm", F::Str(id)),
-        ("object.crypto.exception", F::Str(exception)),
-    ];
-    subject(peer, &mut fields);
+pub fn exception_used(
+    peer: &Peer,
+    id: &str,
+    grade: Option<Grade>,
+    exception: &str,
+) -> peios::Result<Vec<u8>> {
+    let mut fields = vec![("object.crypto-exception.name", F::Str(exception))];
+    algorithm(id, grade, &mut fields);
+    subject(Some(peer), &mut fields);
     payload(&fields)
 }
 
@@ -177,16 +198,27 @@ mod tests {
 
     #[test]
     fn an_exceptions_use_names_the_process_the_algorithm_and_the_exception() {
-        let peer = Peer { sid: vec![1, 0], pid: 42 };
-        let bytes = exception_used(&peer, "md5.hmac", "Radius.PacketAuth").unwrap();
+        let peer = Peer { sid: vec![1, 0], pid: Some(42) };
+        let bytes = exception_used(&peer, "md5.hmac", Some(Grade::D), "Radius.PacketAuth").unwrap();
         assert_eq!(
             flat(&bytes),
             pairs(&[
-                ("object.crypto.algorithm", "md5.hmac"),
-                ("object.crypto.exception", "Radius.PacketAuth"),
+                ("object.crypto-algorithm.grade", "D"),
+                ("object.crypto-algorithm.id", "md5.hmac"),
+                ("object.crypto-exception.name", "Radius.PacketAuth"),
                 ("subject.process.pid", "42"),
                 ("subject.token.sid", "[1, 0]"),
             ])
+        );
+    }
+
+    #[test]
+    fn cryptods_own_records_name_it_without_a_pid() {
+        let own = Peer { sid: vec![1, 5], pid: None };
+        let bytes = policy_failed("invalid-setting", "", None, Some(&own)).unwrap();
+        assert_eq!(
+            flat(&bytes),
+            pairs(&[("outcome.reason", "invalid-setting"), ("subject.token.sid", "[1, 5]")])
         );
     }
 
