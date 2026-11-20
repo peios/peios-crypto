@@ -234,6 +234,11 @@ int peios_tls_peek_ex(struct ssl_st *ssl, void *buf, size_t num, size_t *read_by
 int peios_tls_write(struct ssl_st *ssl, const void *buf, int num);
 int peios_tls_write_ex(struct ssl_st *ssl, const void *buf, size_t num, size_t *written);
 
+/* Whether the machine's policy allows `algorithm` for this process
+   (machine.c), reporting to cryptod what it warns about and each
+   exception's first use. */
+int peios_machine_allows(const struct peios_algorithm *algorithm);
+
 /* The testing libraries only: refuse grades below `grade`. */
 void peios_policy_testing_reject_below(enum peios_grade grade);
 

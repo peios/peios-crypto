@@ -2,9 +2,7 @@
    against AWS-LC's prefixed headers, so that it calls AWS-LC directly
    rather than through libpcrypto's own hooks.
 
-   Until the runtime reads the machine's policy, it applies Peios's
-   defaults: nothing above the floor is refused, grades below C are warned
-   about, and FIPS is off. Warnings aren't reported yet. */
+   Each decision is the machine's policy, as machine.c reads it. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,25 +31,6 @@
    that OCSP's and PKCS #7's calls to it are checked too. */
 extern __typeof__(X509_verify_cert) PEIOS_INNER(X509_verify_cert);
 
-#ifdef PEIOS_TESTING
-static struct peios_policy default_policy = {
-#else
-static const struct peios_policy default_policy = {
-#endif
-    .reject_below = PEIOS_GRADE_U,
-    .warn_below = PEIOS_GRADE_C,
-    .reject_non_fips = 0,
-    .warn_non_fips = 0,
-};
-
-#ifdef PEIOS_TESTING
-/* The testing libraries' own: refuse grades below `grade`, so that a test
-   can show a check refusing what the floor alone wouldn't. */
-void peios_policy_testing_reject_below(enum peios_grade grade) {
-    default_policy.reject_below = grade;
-}
-#endif
-
 /* Whether the call using `algorithm`, or an ungraded algorithm if it's
    NULL, may go ahead. */
 static int decide(const struct peios_algorithm *algorithm) {
@@ -59,7 +38,7 @@ static int decide(const struct peios_algorithm *algorithm) {
         ERR_put_error(ERR_LIB_USER, 0, PEIOS_R_UNGRADED_ALGORITHM, __FILE__, __LINE__);
         return 0;
     }
-    if (peios_policy_decision(algorithm, &default_policy) == PEIOS_REJECT) {
+    if (!peios_machine_allows(algorithm)) {
         ERR_put_error(ERR_LIB_USER, 0, PEIOS_R_REFUSED_BY_POLICY, __FILE__, __LINE__);
         return 0;
     }

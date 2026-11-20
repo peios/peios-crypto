@@ -108,6 +108,10 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
          $CC {OWN_CFLAGS} -Iinclude -I{RUNTIME} -Igen -c {RUNTIME}/policy.c -o gen/policy.o; \
          $CC {OWN_CFLAGS} -DPEIOS_TESTING -Iinclude -I{RUNTIME} -Igen -c {RUNTIME}/policy.c \
          -o gen/policy-testing.o; \
+         $CC {OWN_CFLAGS} -Iinclude -I{PEIOS}/include -I{RUNTIME} -c {RUNTIME}/machine.c \
+         -o gen/machine.o; \
+         $CC {OWN_CFLAGS} -DPEIOS_TESTING -Iinclude -I{PEIOS}/include -I{RUNTIME} \
+         -c {RUNTIME}/machine.c -o gen/machine-testing.o; \
          $CC {OWN_CFLAGS} -I{RUNTIME} -c {RUNTIME}/decision.c -o gen/decision.o; \
          $CC {OWN_CFLAGS} -Iinclude -I{RUNTIME} -c gen/policy-table.c -o gen/policy-table.o; \
          $CC {OWN_CFLAGS} -I{REFERENCE}/include -I{RUNTIME} -Igen -c {RUNTIME}/tls.c -o gen/tls.o; \
@@ -116,12 +120,12 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
          begin=$($CC -print-file-name=crtbeginS.o); end=$($CC -print-file-name=crtendS.o); \
          for variant in dist testing; do \
          if [ $variant = dist ]; then maps=; out=$D/lib; else maps=-testing; out=$T/lib; fi; \
-         if [ $variant = dist ]; then policy=gen/policy.o; else policy=gen/policy-testing.o; fi; \
+         if [ $variant = dist ]; then policy=\"gen/policy.o gen/machine.o\"; \
+         else policy=\"gen/policy-testing.o gen/machine-testing.o\"; fi; \
          $CC {LINK} -Wl,-soname,libpcrypto.so.1 -o $out/libpcrypto.so.1 \"$begin\" \
          gen/crypto-forwarders.o gen/crypto-hooks.o $policy gen/decision.o gen/policy-table.o \
          gen/reading.o @gen/crypto-wraps.rsp -Wl,--whole-archive lib/libcrypto.a -Wl,--no-whole-archive \
-         -Wl,--version-script=gen/crypto$maps.map -L{PEIOS}/lib -Wl,--no-as-needed -lpeios \
-         -Wl,--as-needed -lpthread \"$end\"; \
+         -Wl,--version-script=gen/crypto$maps.map -L{PEIOS}/lib -lpeios -lpthread \"$end\"; \
          $CXX {LINK} -Wl,-soname,libpssl.so.1 -o $out/libpssl.so.1 \"$begin\" \
          gen/ssl-forwarders.o gen/ssl-hooks.o gen/tls.o @gen/ssl-wraps.rsp \
          -Wl,--whole-archive lib/libssl.a -Wl,--no-whole-archive \
@@ -163,6 +167,13 @@ fn pc(name: String, description: String, requires: String, libs: String) -> Stri
 # Where a program that loads libpcrypto finds libpeios, which it needs.
 def peios_path() -> String {
     = PEIOS
+}
+
+# What a program that links or loads libpcrypto needs beside it: libpeios,
+# by its soname, under peios_path(). A cross linker finds it there with
+# `-Wl,-rpath-link,{peios_path()}/lib`.
+def pcrypto_needs() -> List<{at: String, place: Dir | File}> {
+    = [{at = "{PEIOS}/lib/libpeios.so.0"; place = build libpeios()}]
 }
 
 def pcrypto_path() -> String {

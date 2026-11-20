@@ -206,12 +206,12 @@ def test consumer_builds(
 ) {
     let ran = checked(
         "cd /tmp; \"$CC\" -fPIE -pie -fcf-protection=full -I{PCRYPTO}/include \
-         -o consumer /work/consumer.c -L{PCRYPTO}/lib -lpssl -lpcrypto; \
+         -o consumer /work/consumer.c -L{PCRYPTO}/lib -lpssl -lpcrypto -Wl,-rpath-link,{PEIOS_LIB}; \
          \"$READELF\" -rW consumer | grep -q 'R_X86_64_COPY.*ASN1_OCTET_STRING_it' \
          || {{ echo 'consumer has no copy relocation for ASN1_OCTET_STRING_it'; exit 1; }}; \
          LD_LIBRARY_PATH={PCRYPTO}/lib:$LD_LIBRARY_PATH ./consumer; \
          \"$CC\" -fPIE -pie -fcf-protection=full -I{PCRYPTO}/include \
-         -o consumer-openssl-names /work/consumer.c -L{PCRYPTO}/lib -lssl -lcrypto; \
+         -o consumer-openssl-names /work/consumer.c -L{PCRYPTO}/lib -lssl -lcrypto -Wl,-rpath-link,{PEIOS_LIB}; \
          for lib in libpssl.so.1 libpcrypto.so.1; do \
          \"$READELF\" -d consumer-openssl-names | grep -q \"(NEEDED).*\\[$lib\\]\" \
          || {{ echo \"linked with -lssl -lcrypto, the consumer does not load $lib\"; exit 1; }}; done; \
@@ -266,7 +266,7 @@ def test policy_hooks(
 ) {
     let ran = checked(
         "cd /tmp; \"$CC\" -Wall -Werror -I{PCRYPTO}/include -o policy_hooks /work/policy_hooks.c \
-         -L{PCRYPTO}/lib -lpcrypto; LD_LIBRARY_PATH={PCRYPTO}/lib:$LD_LIBRARY_PATH ./policy_hooks",
+         -L{PCRYPTO}/lib -lpcrypto -Wl,-rpath-link,{PEIOS_LIB}; LD_LIBRARY_PATH={PCRYPTO}/lib:$LD_LIBRARY_PATH ./policy_hooks",
         [{at = PCRYPTO; place = pcrypto}, {at = "/work/policy_hooks.c"; place = source}],
         c = c,
         env = env,
@@ -288,12 +288,41 @@ def test reading_policy(
 ) {
     let ran = checked(
         "cd /tmp; \"$CC\" -Wall -Werror -Wno-deprecated-declarations -I{PCRYPTO}/include \
-         -o reading_policy /work/reading_policy.c -L{TESTING}/lib -l:libpcrypto.so.1; \
+         -o reading_policy /work/reading_policy.c -L{TESTING}/lib -l:libpcrypto.so.1 -Wl,-rpath-link,{PEIOS_LIB}; \
          LD_LIBRARY_PATH={TESTING}/lib:$LD_LIBRARY_PATH ./reading_policy",
         [
             {at = PCRYPTO; place = pcrypto},
             {at = TESTING; place = testing},
             {at = "/work/reading_policy.c"; place = source},
+        ],
+        c = c,
+        env = env,
+        peios = peios,
+    )
+}
+
+# The machine's policy as a process sees it: read from cryptod's policy
+# file or Peios's defaults, its thresholds and exceptions applied, and its
+# warnings and exceptions' use reported once per process, against the
+# testing libpcrypto, which takes the policy's path, its copy's SDDL, the
+# exceptions the process may use and the report socket from the
+# environment.
+def test machine_policy(
+    pcrypto: Dir = build pcrypto(),
+    testing: Dir = build pcrypto_testing(),
+    source: File = file("tests/machine_policy.c"),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
+) {
+    let ran = checked(
+        "cd /tmp; \"$CC\" -Wall -Werror -D_GNU_SOURCE -I{PCRYPTO}/include -o machine_policy \
+         /work/machine_policy.c -L{TESTING}/lib -l:libpcrypto.so.1 -Wl,-rpath-link,{PEIOS_LIB}; \
+         LD_LIBRARY_PATH={TESTING}/lib:$LD_LIBRARY_PATH ./machine_policy",
+        [
+            {at = PCRYPTO; place = pcrypto},
+            {at = TESTING; place = testing},
+            {at = "/work/machine_policy.c"; place = source},
         ],
         c = c,
         env = env,
@@ -313,7 +342,7 @@ def test tls_policy(
 ) {
     let ran = checked(
         "cd /tmp; \"$CC\" -Wall -Werror -I{PCRYPTO}/include -o tls_policy /work/tls_policy.c \
-         -L{PCRYPTO}/lib -lpssl -lpcrypto; LD_LIBRARY_PATH={PCRYPTO}/lib:$LD_LIBRARY_PATH ./tls_policy",
+         -L{PCRYPTO}/lib -lpssl -lpcrypto -Wl,-rpath-link,{PEIOS_LIB}; LD_LIBRARY_PATH={PCRYPTO}/lib:$LD_LIBRARY_PATH ./tls_policy",
         [{at = PCRYPTO; place = pcrypto}, {at = "/work/tls_policy.c"; place = source}],
         c = c,
         env = env,
@@ -351,9 +380,10 @@ def build system_awslc() {
             {
                 package = "aws-lc-sys"
                 env = [{key = "AWS_LC_SYS_SYSTEM_DIR"; value = PCRYPTO}]
-                given = [{at = PCRYPTO; place = build pcrypto()}]
+                given = [{at = PCRYPTO; place = build pcrypto()}, ...pcrypto_needs()]
             },
         ],
+        rustflags = ["-C", "link-arg=-Wl,-rpath-link,{PEIOS_LIB}"],
     )
     = rust.bin(ws, "system-awslc")
 }
