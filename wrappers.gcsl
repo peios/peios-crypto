@@ -20,6 +20,7 @@
 import toolchain
 import Toolchain from toolchain
 import PythonToolchain from "github.com/gcslib/python"
+import build * from "github.com/peios/peios-sdk"
 
 let PCRYPTO = "/opt/pcrypto"
 
@@ -38,6 +39,10 @@ let RUNTIME = "/work/runtime"
 let PYTHON = "/opt/python"
 
 let BINDINGS = "/work/aws_lc_bindings.rs"
+
+# libpeios, which libpcrypto links: the policy runtime reads its process's
+# token and checks exceptions' ProgramSecurity through it.
+let PEIOS = "/opt/peios"
 
 # AWS-LC's source, whose internal headers declare the functions outside its
 # API that the runtime wraps, so that a changed declaration fails the build.
@@ -115,7 +120,8 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
          $CC {LINK} -Wl,-soname,libpcrypto.so.1 -o $out/libpcrypto.so.1 \"$begin\" \
          gen/crypto-forwarders.o gen/crypto-hooks.o $policy gen/decision.o gen/policy-table.o \
          gen/reading.o @gen/crypto-wraps.rsp -Wl,--whole-archive lib/libcrypto.a -Wl,--no-whole-archive \
-         -Wl,--version-script=gen/crypto$maps.map -lpthread \"$end\"; \
+         -Wl,--version-script=gen/crypto$maps.map -L{PEIOS}/lib -Wl,--no-as-needed -lpeios \
+         -Wl,--as-needed -lpthread \"$end\"; \
          $CXX {LINK} -Wl,-soname,libpssl.so.1 -o $out/libpssl.so.1 \"$begin\" \
          gen/ssl-forwarders.o gen/ssl-hooks.o gen/tls.o @gen/ssl-wraps.rsp \
          -Wl,--whole-archive lib/libssl.a -Wl,--no-whole-archive \
@@ -138,6 +144,8 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
             {at = PYTHON; place = python.root},
             {at = BINDINGS; place = build awslc_rust_bindings()},
             {at = AWSLC_SOURCE; place = build awslc_source()},
+            {at = "{PEIOS}/lib/libpeios.so"; place = build libpeios()},
+            {at = "{PEIOS}/include"; place = build libpeios_include()},
         ],
     )
 }
@@ -150,6 +158,11 @@ fn pc(name: String, description: String, requires: String, libs: String) -> Stri
     = "printf '%s\\n' 'prefix=/usr' 'libdir=${{prefix}}/lib' 'includedir=${{prefix}}/include' '' \
        'Name: {name}' 'Description: {description}' 'Version: {OPENSSL_API}' \
        {requires_line} {libs_line} 'Cflags: -I${{includedir}}' > $D/lib/pkgconfig/{name}.pc"
+}
+
+# Where a program that loads libpcrypto finds libpeios, which it needs.
+def peios_path() -> String {
+    = PEIOS
 }
 
 def pcrypto_path() -> String {

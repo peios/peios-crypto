@@ -8,10 +8,15 @@ import base from "github.com/gcslib/buildenv"
 import bin_path from "github.com/gcslib/buildenv"
 import "github.com/gcslib/rust"
 import PythonToolchain from "github.com/gcslib/python"
+import build * from "github.com/peios/peios-sdk"
 
 let TOOL_CC = "/opt/cc"
 
 let PCRYPTO = pcrypto_path()
+
+# Where every test has libpeios, which libpcrypto loads, and its loader
+# path, which each test's own LD_LIBRARY_PATH extends.
+let PEIOS_LIB = "{peios_path()}/lib"
 
 let REFERENCE = awslc_reference_path()
 
@@ -30,7 +35,7 @@ let INTERNALS = "ml_kem_768_keypair CRYPTO_gcm128_encrypt _ZN4bssl11{PREFIX}9SSL
 fn as_awslc(program: String) -> String {
     = "mkdir -p /tmp/lib; ln -s {TESTING}/lib/libpcrypto.so.1 /tmp/lib/libcrypto-awslc.so.1; \
        ln -s {TESTING}/lib/libpssl.so.1 /tmp/lib/libssl-awslc.so.1; \
-       export LD_LIBRARY_PATH=/tmp/lib:{TESTING}/lib:{REFERENCE}/tests; \
+       export LD_LIBRARY_PATH=/tmp/lib:{TESTING}/lib:{REFERENCE}/tests:$LD_LIBRARY_PATH; \
        LD_TRACE_LOADED_OBJECTS=1 {program} > /tmp/loaded || true; \
        grep -q 'libcrypto-awslc.so.1 => /tmp/lib/' /tmp/loaded \
        || {{ echo '{program} would not load the wrappers:'; cat /tmp/loaded; exit 1; }}"
@@ -48,6 +53,7 @@ def test pcrypto_exports(
     testing: Dir = build pcrypto_testing(),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
 ) {
     let ran = checked(
         "exports() {{ \"$READELF\" --dyn-syms -W \"$1\" \
@@ -61,6 +67,7 @@ def test pcrypto_exports(
         [{at = PCRYPTO; place = pcrypto}, {at = TESTING; place = testing}],
         c = c,
         env = env,
+        peios = peios,
     )
     let shipped = checked(
         "cd {PCRYPTO}/lib; for lib in libpcrypto libpssl; do \
@@ -84,6 +91,7 @@ def test pcrypto_exports(
         [{at = PCRYPTO; place = pcrypto}],
         c = c,
         env = env,
+        peios = peios,
     )
 }
 
@@ -127,6 +135,7 @@ def test awslc_crypto_test(
     reference: Dir = build awslc_reference(),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
 ) {
     let ran = checked(
         "{as_awslc("{REFERENCE}/tests/crypto_test")}; cd /tmp; {REFERENCE}/tests/crypto_test \
@@ -134,6 +143,7 @@ def test awslc_crypto_test(
         [{at = TESTING; place = testing}, {at = "{REFERENCE}/tests"; place = reference.dir("tests")}],
         c = c,
         env = env,
+        peios = peios,
     )
 }
 
@@ -146,6 +156,7 @@ def test awslc_ssl_test(
     reference: Dir = build awslc_reference(),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
 ) {
     let ran = checked(
         "{as_awslc("{REFERENCE}/tests/ssl_test")}; cd /tmp; {REFERENCE}/tests/ssl_test \
@@ -153,6 +164,7 @@ def test awslc_ssl_test(
         [{at = TESTING; place = testing}, {at = "{REFERENCE}/tests"; place = reference.dir("tests")}],
         c = c,
         env = env,
+        peios = peios,
     )
 }
 
@@ -164,6 +176,7 @@ def test bssl_runs(
     reference: Dir = build awslc_reference(),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
 ) {
     let bssl = "{REFERENCE}/bin/bssl"
     let ran = checked(
@@ -175,6 +188,7 @@ def test bssl_runs(
         [{at = TESTING; place = testing}, {at = "{REFERENCE}/bin"; place = reference.dir("bin")}],
         c = c,
         env = env,
+        peios = peios,
     )
 }
 
@@ -188,22 +202,24 @@ def test consumer_builds(
     source: File = file("tests/consumer.c"),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
 ) {
     let ran = checked(
         "cd /tmp; \"$CC\" -fPIE -pie -fcf-protection=full -I{PCRYPTO}/include \
          -o consumer /work/consumer.c -L{PCRYPTO}/lib -lpssl -lpcrypto; \
          \"$READELF\" -rW consumer | grep -q 'R_X86_64_COPY.*ASN1_OCTET_STRING_it' \
          || {{ echo 'consumer has no copy relocation for ASN1_OCTET_STRING_it'; exit 1; }}; \
-         LD_LIBRARY_PATH={PCRYPTO}/lib ./consumer; \
+         LD_LIBRARY_PATH={PCRYPTO}/lib:$LD_LIBRARY_PATH ./consumer; \
          \"$CC\" -fPIE -pie -fcf-protection=full -I{PCRYPTO}/include \
          -o consumer-openssl-names /work/consumer.c -L{PCRYPTO}/lib -lssl -lcrypto; \
          for lib in libpssl.so.1 libpcrypto.so.1; do \
          \"$READELF\" -d consumer-openssl-names | grep -q \"(NEEDED).*\\[$lib\\]\" \
          || {{ echo \"linked with -lssl -lcrypto, the consumer does not load $lib\"; exit 1; }}; done; \
-         LD_LIBRARY_PATH={PCRYPTO}/lib ./consumer-openssl-names",
+         LD_LIBRARY_PATH={PCRYPTO}/lib:$LD_LIBRARY_PATH ./consumer-openssl-names",
         [{at = PCRYPTO; place = pcrypto}, {at = "/work/consumer.c"; place = source}],
         c = c,
         env = env,
+        peios = peios,
     )
 }
 
@@ -219,6 +235,7 @@ def test generator_refuses(
     python: PythonToolchain = toolchain.get(Toolchain::Python),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
 ) {
     let ran = checked(
         "/opt/python/bin/python3 -I /work/generator_test.py /work/generate.py /work/inputs \
@@ -233,6 +250,7 @@ def test generator_refuses(
         ],
         c = c,
         env = env,
+        peios = peios,
     )
 }
 
@@ -244,13 +262,15 @@ def test policy_hooks(
     source: File = file("tests/policy_hooks.c"),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
 ) {
     let ran = checked(
         "cd /tmp; \"$CC\" -Wall -Werror -I{PCRYPTO}/include -o policy_hooks /work/policy_hooks.c \
-         -L{PCRYPTO}/lib -lpcrypto; LD_LIBRARY_PATH={PCRYPTO}/lib ./policy_hooks",
+         -L{PCRYPTO}/lib -lpcrypto; LD_LIBRARY_PATH={PCRYPTO}/lib:$LD_LIBRARY_PATH ./policy_hooks",
         [{at = PCRYPTO; place = pcrypto}, {at = "/work/policy_hooks.c"; place = source}],
         c = c,
         env = env,
+        peios = peios,
     )
 }
 
@@ -264,11 +284,12 @@ def test reading_policy(
     source: File = file("tests/reading_policy.c"),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
 ) {
     let ran = checked(
         "cd /tmp; \"$CC\" -Wall -Werror -Wno-deprecated-declarations -I{PCRYPTO}/include \
          -o reading_policy /work/reading_policy.c -L{TESTING}/lib -l:libpcrypto.so.1; \
-         LD_LIBRARY_PATH={TESTING}/lib ./reading_policy",
+         LD_LIBRARY_PATH={TESTING}/lib:$LD_LIBRARY_PATH ./reading_policy",
         [
             {at = PCRYPTO; place = pcrypto},
             {at = TESTING; place = testing},
@@ -276,6 +297,7 @@ def test reading_policy(
         ],
         c = c,
         env = env,
+        peios = peios,
     )
 }
 
@@ -287,13 +309,15 @@ def test tls_policy(
     source: File = file("tests/tls_policy.c"),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
 ) {
     let ran = checked(
         "cd /tmp; \"$CC\" -Wall -Werror -I{PCRYPTO}/include -o tls_policy /work/tls_policy.c \
-         -L{PCRYPTO}/lib -lpssl -lpcrypto; LD_LIBRARY_PATH={PCRYPTO}/lib ./tls_policy",
+         -L{PCRYPTO}/lib -lpssl -lpcrypto; LD_LIBRARY_PATH={PCRYPTO}/lib:$LD_LIBRARY_PATH ./tls_policy",
         [{at = PCRYPTO; place = pcrypto}, {at = "/work/tls_policy.c"; place = source}],
         c = c,
         env = env,
+        peios = peios,
     )
 }
 
@@ -304,6 +328,7 @@ def test policy_decision(
     source: File = file("tests/decision_test.c"),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
 ) {
     let ran = checked(
         "cd /tmp; \"$CC\" -Wall -Wextra -Werror -I/work/runtime -o decision_test \
@@ -311,6 +336,7 @@ def test policy_decision(
         [{at = "/work/runtime"; place = runtime}, {at = "/work/decision_test.c"; place = source}],
         c = c,
         env = env,
+        peios = peios,
     )
 }
 
@@ -340,16 +366,18 @@ def test aws_lc_rs_system(
     pcrypto: Dir = build pcrypto(),
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File = build libpeios(),
 ) {
     let ran = checked(
         "\"$READELF\" -d /work/system-awslc | grep -q '(NEEDED).*\\[libpcrypto.so.1\\]' \
          || {{ echo 'the program does not load libpcrypto.so.1'; exit 1; }}; \
          if \"$NM\" /work/system-awslc 2>/dev/null | grep -q 'aws_lc_0_'; then \
          echo 'the program carries its own AWS-LC'; exit 1; fi; \
-         LD_LIBRARY_PATH={PCRYPTO}/lib /work/system-awslc | grep -qx 'system-awslc: ok'",
+         LD_LIBRARY_PATH={PCRYPTO}/lib:$LD_LIBRARY_PATH /work/system-awslc | grep -qx 'system-awslc: ok'",
         [{at = PCRYPTO; place = pcrypto}, {at = "/work/system-awslc"; place = program}],
         c = c,
         env = env,
+        peios = peios,
     )
 }
 
@@ -361,12 +389,14 @@ fn checked(
     given: List<{at: String, place: Dir | File}>,
     c: toolchain.CToolchain = toolchain.get(Toolchain::C),
     env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+    peios: File,
 ) -> {} {
     let at = fn(tool: File) -> String { "{TOOL_CC}/{tool.path.strip_prefix(c.root.path).strip_prefix("/")}" }
     let binutils = at(c.ar).strip_suffix("ar")
     let placed: List<{at: String, place: Dir | File | FileSet}> = [
         ...base(env, c.runtime),
         {at = TOOL_CC; place = c.root},
+        {at = "{PEIOS_LIB}/libpeios.so.0"; place = peios},
         ...(for each in given { = {at = each.at; place = each.place} }),
     ]
     let box = fs.compose(placed).sandbox(
@@ -377,6 +407,7 @@ fn checked(
             READELF = "{binutils}readelf"
             PATH = bin_path(c.runtime)
             HOME = "/tmp"
+            LD_LIBRARY_PATH = PEIOS_LIB
         },
     )
     let ran = box.exec("/bin/sh", "-c", "set -e; mkdir -p /tmp; {script}")

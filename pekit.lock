@@ -35,6 +35,12 @@
       "git": "https://github.com/gcslib/clang",
       "dir": "",
       "rev": "HEAD"
+    },
+    {
+      "prefix": "github.com/peios/peios-sdk",
+      "git": "https://github.com/peios/peios-sdk",
+      "dir": "",
+      "rev": "HEAD"
     }
   ],
   "libraries": [
@@ -79,6 +85,13 @@
       "dir": "",
       "commit": "08732a35010b83be3bd4b97a932d13ec5b7b39cb",
       "tree": "6a65b76477327b07374c88242b8a695eeb5016827cf3079003b2dcd282ee1d14"
+    },
+    {
+      "path": "github.com/peios/peios-sdk",
+      "git": "https://github.com/peios/peios-sdk",
+      "dir": "",
+      "commit": "712be642734adf2b97df11096075c3fa901857c1",
+      "tree": "c832dfc3818cd9540785c58a741d8610c7c8f69b38f26fc9650244b1b727e2e5"
     }
   ]
 }
