@@ -4,6 +4,7 @@ type: how-to
 description: Build C programs and aws-lc-rs crates against libpcrypto and libpssl, the Peios libraries with OpenSSL's API.
 related:
   - peios/cryptography/using-cryptography-from-rust
+  - peios/crypto-policy/overview
 ---
 
 Peios provides cryptography and TLS through two libraries with OpenSSL's
@@ -25,6 +26,10 @@ see [Using Cryptography from Rust](~peios/cryptography/using-cryptography-from-r
 - Build libpcrypto and libpssl from the peios-crypto repository with
   `pekit build pcrypto`, and install the tree it gives under `/usr`. Peios
   doesn't ship them as a package yet.
+- Install libpeios, which libpcrypto loads to read the machine's crypto
+  policy. A static link needs `-lpeios`, which pkg-config's `--static`
+  gives. A cross linker needs `-Wl,-rpath-link` to the directory holding
+  `libpeios.so.0`.
 - Install a C compiler and pkg-config.
 - Expect Peios crypto policy to apply to these libraries' callers. The
   current libraries apply it when a program computes a digest or a MAC
@@ -34,9 +39,10 @@ see [Using Cryptography from Rust](~peios/cryptography/using-cryptography-from-r
   signature in a certificate, OCSP response or PKCS #7 message, or
   finishes a TLS handshake. Data that names its own algorithm, such as an
   encrypted PKCS #12 file, is checked as it's read, before it's
-  decrypted. The libraries enforce only the policy's floor, which no
-  machine can loosen: the null ciphers, the 40-bit export-grade RC2
-  cipher, and RSA keys and Diffie-Hellman parameters under 1024 bits.
+  decrypted. Each process applies the machine's crypto policy, which it
+  reads once, at its first call: its floor, which no machine can loosen,
+  its thresholds, and the exceptions granted to the program. See
+  [How Crypto Policy Works](~peios/crypto-policy/overview).
   Two calls still go straight to AWS-LC: `EVP_CIPHER_CTX_set_key_length`
   and `EVP_CIPHER_CTX_ctrl`, which can change a cipher's key length or
   parameters after the cipher was checked.
@@ -139,13 +145,16 @@ list the functions it leaves out and those that behave differently.
 
 A call that Peios crypto policy refuses fails as any failed OpenSSL call
 does, and leaves an error on the thread's error queue whose library is
-`ERR_LIB_USER`. A few functions can't report failure, or have callers
-that never check: the low-level digest functions, such as `SHA256` and
-`MD5_Init`, the low-level cipher keying functions, such as
-`AES_set_encrypt_key`, and Poly1305's and SipHash's. When policy refuses
-one of those, the program ends with a message naming the function,
-rather than carry on with a digest or key that was never computed. Use
-the `EVP_` functions where a refusal should be handled.
+`ERR_LIB_USER` and whose reason is 1000. Reading the policy and reporting
+to cryptod leave `errno` as they found it.
+
+A few functions can't report failure, or have callers that never check:
+the low-level digest functions, such as `SHA256` and `MD5_Init`, the
+low-level cipher keying functions, such as `AES_set_encrypt_key`, and
+Poly1305's and SipHash's. When policy refuses one of those, the program
+ends with a message naming the function, rather than carry on with a
+digest or key that was never computed. Use the `EVP_` functions where a
+refusal should be handled.
 
 The libraries export only the API AWS-LC's headers declare. Functions
 AWS-LC exports only for its own tests, such as its ML-KEM internals, aren't

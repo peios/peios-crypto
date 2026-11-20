@@ -1,0 +1,104 @@
+{
+  "_comment": [
+    "The cryptod service definition and the machine's crypto policy keys.",
+    "",
+    "Identity is Service, cryptod's own virtual account. That's not",
+    "optional: libpcrypto trusts a policy copy only if SYSTEM or cryptod's",
+    "service SID owns it, and a file cryptod creates is owned by its token's",
+    "user. Under LocalService every process would refuse the policy and fall",
+    "back to Peios's defaults. cryptod logs an error if it finds itself",
+    "running as anything else.",
+    "",
+    "RequiredPrivileges are SeChangeNotifyPrivilege, to traverse, and",
+    "SeAuditPrivilege, to write its events; cryptod-policy.reg grants them",
+    "to cryptod's service SID. No SeTcbPrivilege: cryptod queues its records",
+    "under KMES's per-process rate instead.",
+    "",
+    "ExecStartPre runs prepare-state as SYSTEM (HookIdentity) to create",
+    "/var/state/cryptod, where cryptod keeps the policy across reboots for",
+    "processes that start before it. peinit provisions /run/<service> and",
+    "nothing else, and /var/state is SYSTEM's, as timed-service.reg explains.",
+    "",
+    "Readiness is Notify (0): cryptod notifies once it has published the",
+    "policy and is listening for reports. A process that starts first reads",
+    "the copy kept across reboots, so nothing need be ordered after cryptod.",
+    "",
+    "RestartPolicy is Always (2): while cryptod is down, policy changes",
+    "aren't published and reports are lost. ErrorControl is Normal (0):",
+    "processes keep using the last policy published, so the machine is",
+    "usable without it.",
+    "",
+    "The Cryptography key is created here with Peios's defaults explicit,",
+    "agreed on PEI-1721, so that they're visible to anyone reading the",
+    "registry. cryptod applies the same defaults if the key is absent:",
+    "  Reject MinimumGrade = U   refuse only the floor",
+    "  Warn MinimumGrade = C     record the use of anything graded U or D",
+    "  FIPS = 0 for both         approval doesn't matter",
+    "  Exceptions Enabled = 1, AllowExceptionsToReject = 1,",
+    "  WarnByDefault = 0, WarnAlways = 0",
+    "Packages add exceptions under Exceptions\\<Owner.Purpose> in .reg",
+    "files of their own. The key inherits the hive root's descriptor:",
+    "SYSTEM and Administrators may change it, every authenticated user,",
+    "cryptod among them, may read and watch it.",
+    "",
+    "Shipped into /usr/share/regim/; inert until an image names it in",
+    "[registry] autoapply."
+  ],
+  "keys": [
+    { "path": "Machine\\System" },
+    { "path": "Machine\\System\\Services" },
+    {
+      "path": "Machine\\System\\Services\\cryptod",
+      "values": [
+        { "name": "ImagePath", "type": "sz", "data": "/usr/sbin/cryptod" },
+        { "name": "Triggers", "type": "multi", "data": ["boot"] },
+        { "name": "Identity", "type": "sz", "data": "Service" },
+        {
+          "name": "RequiredPrivileges",
+          "type": "multi",
+          "data": ["SeChangeNotifyPrivilege", "SeAuditPrivilege"]
+        },
+        {
+          "name": "ExecStartPre",
+          "type": "multi",
+          "data": ["/usr/libexec/cryptod/prepare-state"]
+        },
+        { "name": "HookIdentity", "type": "sz", "data": "SYSTEM" },
+        { "name": "Readiness", "type": "dword", "data": 0 },
+        { "name": "RuntimeDirectories", "type": "multi", "data": ["cryptod"] },
+        { "name": "RestartPolicy", "type": "dword", "data": 2 },
+        { "name": "ErrorControl", "type": "dword", "data": 0 },
+        { "name": "DisplayName", "type": "sz", "data": "Crypto policy" },
+        {
+          "name": "Description",
+          "type": "sz",
+          "data": "Publishes the machine's crypto policy and records the weak cryptography in use"
+        }
+      ]
+    },
+    { "path": "Machine\\System\\Cryptography" },
+    {
+      "path": "Machine\\System\\Cryptography\\Reject",
+      "values": [
+        { "name": "MinimumGrade", "type": "sz", "data": "U" },
+        { "name": "FIPS", "type": "dword", "data": 0 }
+      ]
+    },
+    {
+      "path": "Machine\\System\\Cryptography\\Warn",
+      "values": [
+        { "name": "MinimumGrade", "type": "sz", "data": "C" },
+        { "name": "FIPS", "type": "dword", "data": 0 }
+      ]
+    },
+    {
+      "path": "Machine\\System\\Cryptography\\Exceptions",
+      "values": [
+        { "name": "Enabled", "type": "dword", "data": 1 },
+        { "name": "WarnByDefault", "type": "dword", "data": 0 },
+        { "name": "WarnAlways", "type": "dword", "data": 0 },
+        { "name": "AllowExceptionsToReject", "type": "dword", "data": 1 }
+      ]
+    }
+  ]
+}

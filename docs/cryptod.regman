@@ -1,0 +1,231 @@
+--- machine\system\cryptography
+canonical: Machine\System\Cryptography
+
+The machine's crypto policy, which libpcrypto and libpssl apply to every
+program that uses them.
+
+Each use of cryptography is graded as an entry: an algorithm and the
+operation it's used for, such as `md5.hmac`, on a ladder from U,
+practically broken, to A. `/usr/share/peios-crypto/algorithms.tsv` lists
+every entry with its grade, and whether FIPS 140-3 approves it. The
+policy refuses entries below one grade, warns about entries below
+another, and lets named programs use particular entries through
+exceptions. A small floor, such as the null ciphers and RSA keys under
+1024 bits, is refused under every policy, and nothing can allow it.
+
+cryptod compiles this key into the policy file libpcrypto reads, when it
+starts and whenever the key has been still for a moment after a change.
+Each process reads the policy once, at its first use of libpcrypto, and
+keeps it: a change applies to processes started afterwards, and a running
+service needs a restart to take it up.
+
+If a value here is present but can't be read, such as a grade that isn't
+U to A, cryptod keeps the policy it last published and records
+`cryptod.policy.failed`, rather than falling back to defaults that could
+be looser. If the key doesn't exist, the defaults below apply.
+
+SYSTEM and Administrators can change the key. Every authenticated user can
+read it.
+
+--- machine\system\cryptography\reject
+canonical: Machine\System\Cryptography\Reject
+
+What the policy refuses.
+
+A refused use fails as if the algorithm were unsupported, with an error
+whose reason is 1000 in the `ERR_LIB_USER` library. A refused low-level
+digest ends the program, because those functions can't report failure.
+Before raising `MinimumGrade`, search `cryptod.algorithm.warned` records
+for what would stop working.
+
+--- machine\system\cryptography\reject minimumgrade
+canonical: Machine\System\Cryptography\Reject MinimumGrade
+type: REG_SZ
+default: U
+valid: U, D, C, B, A
+applies: live (for processes started afterwards)
+
+The lowest grade the policy allows: entries below it are refused.
+
+At `U`, only the floor is refused. `C` refuses everything graded U or D,
+such as MD5 and SHA-1 digests (`md5.digest`, `sha1.digest`) and HMAC-MD5
+(`md5.hmac`). An exception can allow a
+refused entry for particular programs when
+`Exceptions\AllowExceptionsToReject` is 1.
+
+--- machine\system\cryptography\reject fips
+canonical: Machine\System\Cryptography\Reject FIPS
+type: REG_DWORD
+default: 0
+valid: 0, 1
+applies: live (for processes started afterwards)
+
+Whether the policy refuses every entry FIPS 140-3 doesn't approve.
+
+- `0`: approval doesn't matter.
+- `1`: refuse unapproved entries, whatever their grade.
+
+Setting it doesn't make the machine operate in a FIPS-approved mode:
+libpcrypto's module isn't validated. cryptod's posture always reports
+that.
+
+--- machine\system\cryptography\warn
+canonical: Machine\System\Cryptography\Warn
+
+What the policy allows but records.
+
+Each process reports the first use of each warned-about entry, and cryptod
+records it as `cryptod.algorithm.warned`.
+
+--- machine\system\cryptography\warn minimumgrade
+canonical: Machine\System\Cryptography\Warn MinimumGrade
+type: REG_SZ
+default: C
+valid: U, D, C, B, A
+applies: live (for processes started afterwards)
+
+The lowest grade the policy allows without recording it: the use of an
+entry below it is recorded.
+
+Set it at or above `Reject\MinimumGrade`, or it records nothing that isn't
+already refused.
+
+--- machine\system\cryptography\warn fips
+canonical: Machine\System\Cryptography\Warn FIPS
+type: REG_DWORD
+default: 0
+valid: 0, 1
+applies: live (for processes started afterwards)
+
+Whether the policy records the use of every entry FIPS 140-3 doesn't
+approve.
+
+- `0`: approval doesn't matter.
+- `1`: record unapproved entries, whatever their grade.
+
+--- machine\system\cryptography\exceptions
+canonical: Machine\System\Cryptography\Exceptions
+
+Exceptions to the policy, and how they apply.
+
+Each subkey is one exception, named `Owner.Purpose`. Packages add their own
+when they install and remove them when they uninstall.
+
+An exception applies to the programs its `ProgramSecurity` grants, judged
+by each process's primary token. Impersonation is ignored: an exception
+says which software needs an algorithm, not whose behalf it's acting on.
+A service keeps its exceptions while it serves a client, and a client
+can't weaken a service's crypto. Any SID can be granted, but a user or
+group SID grants every program that runs as that user or group, so prefer
+a service's own SID.
+
+Each process's first use of each exception is recorded as
+`cryptod.exception.used`, whether or not the exception warns.
+
+--- machine\system\cryptography\exceptions enabled
+canonical: Machine\System\Cryptography\Exceptions Enabled
+type: REG_DWORD
+default: 1
+valid: 0, 1
+applies: live (for processes started afterwards)
+
+Whether exceptions apply at all.
+
+- `0`: every exception is ignored, so the thresholds apply to every
+  program.
+- `1`: exceptions apply.
+
+--- machine\system\cryptography\exceptions warnbydefault
+canonical: Machine\System\Cryptography\Exceptions WarnByDefault
+type: REG_DWORD
+default: 0
+valid: 0, 1
+applies: live (for processes started afterwards)
+
+Whether an exception with no `Warn` value of its own warns about what it
+allows.
+
+--- machine\system\cryptography\exceptions warnalways
+canonical: Machine\System\Cryptography\Exceptions WarnAlways
+type: REG_DWORD
+default: 0
+valid: 0, 1
+applies: live (for processes started afterwards)
+
+Whether every exception warns about what it allows, whatever its own
+`Warn` says.
+
+--- machine\system\cryptography\exceptions allowexceptionstoreject
+canonical: Machine\System\Cryptography\Exceptions AllowExceptionsToReject
+type: REG_DWORD
+default: 1
+valid: 0, 1
+applies: live (for processes started afterwards)
+
+Whether exceptions may allow entries the policy refuses.
+
+- `0`: exceptions only stop warnings. A refused entry is refused for every
+  program.
+- `1`: an exception allows the entries it names for its programs, except
+  the floor.
+
+--- machine\system\cryptography\exceptions\<name>
+canonical: Machine\System\Cryptography\Exceptions\<name>
+
+One exception: entries that particular programs may use, named
+`Owner.Purpose`, such as `Radius.PacketAuth`.
+
+The name is the owner, a dot, then the purpose, in at most 255 printable
+ASCII bytes with no spaces. Packages name their exceptions after
+themselves.
+
+An exception that can't apply as written allows nothing. cryptod drops it
+whole, publishes the rest of the policy, and records
+`cryptod.policy.failed` naming it. That happens when it names an entry
+libpcrypto doesn't grade, names one on the floor, names none, or has no
+usable `ProgramSecurity`.
+
+--- machine\system\cryptography\exceptions\<name> algorithms
+canonical: Machine\System\Cryptography\Exceptions\<name> Algorithms
+type: REG_MULTI_SZ
+default: (required)
+valid: entries in /usr/share/peios-crypto/algorithms.tsv
+applies: live (for processes started afterwards)
+
+The entries the exception allows, each an algorithm and an operation, such
+as `md5.hmac`.
+
+Name the operation as well as the algorithm. HMAC-MD5 and an MD5 digest
+are different entries with different grades, and allowing one doesn't
+allow the other. A single REG_SZ entry is accepted too.
+
+--- machine\system\cryptography\exceptions\<name> programsecurity
+canonical: Machine\System\Cryptography\Exceptions\<name> ProgramSecurity
+type: REG_BINARY or REG_SZ
+default: (required)
+valid: a security descriptor with a DACL
+applies: live (for processes started afterwards)
+
+The programs that may use the exception: a security descriptor granting
+them the Use right, `0x1`.
+
+Give a self-relative descriptor as REG_BINARY, or SDDL as REG_SZ. Each
+process's primary token is checked against it, ignoring impersonation.
+Grant a service's own SID, `S-1-5-80-...`, for one service. A descriptor
+with no DACL would grant every program, so cryptod drops it.
+
+--- machine\system\cryptography\exceptions\<name> warn
+canonical: Machine\System\Cryptography\Exceptions\<name> Warn
+type: REG_DWORD
+default: (absent; Exceptions\WarnByDefault applies)
+valid: 0, 1
+applies: live (for processes started afterwards)
+
+Whether the exception's use is recorded as a warning as well.
+
+- `0`: only the first use in each process is recorded, as
+  `cryptod.exception.used`.
+- `1`: each entry's first use is also recorded as
+  `cryptod.algorithm.warned`.
+
+`Exceptions\WarnAlways` overrides it.

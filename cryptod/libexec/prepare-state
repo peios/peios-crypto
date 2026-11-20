@@ -1,0 +1,29 @@
+#!/bin/sh
+# Give cryptod the directory it keeps the policy in across reboots.
+#
+# Run as SYSTEM by ExecStartPre, because cryptod can't do this itself:
+# peinit provisions /run/<service> and nothing else, and /var/state is
+# SYSTEM's.
+#
+# The policy copy here is what every process started before cryptod
+# reads, so the directory must let every reader traverse it: Everyone,
+# and confined applications, whose confinement no privilege bypasses.
+# A reader that can't reach the copy falls back to Peios's defaults,
+# which would loosen a tightened policy. Only SYSTEM, Administrators and
+# cryptod may change it. The copy's own descriptor, which cryptod sets,
+# is what libpcrypto checks.
+#
+# Idempotent: the hook runs on every start, including every restart.
+exec >/var/state/cryptod-prepare.log 2>&1
+set -x
+set -e
+
+CRYPTOD_SID='S-1-5-80-2691053820-547492864-353945177-641201782-1210658655'
+READ_TRAVERSE='0x1200a9'
+STATE=/var/state/cryptod
+
+mkdir -p "$STATE"
+
+# A complete protected descriptor. The read grants aren't inheritable:
+# cryptod gives each copy a protected descriptor of its own.
+sd set "$STATE" "O:SYG:SYD:P(A;OICI;GA;;;SY)(A;OICI;GA;;;BA)(A;OICI;GA;;;$CRYPTOD_SID)(A;;$READ_TRAVERSE;;;WD)(A;;$READ_TRAVERSE;;;AC)(A;;$READ_TRAVERSE;;;S-1-15-2-2)"

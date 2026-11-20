@@ -1,0 +1,223 @@
+--- field object.crypto-algorithm.id
+type: str
+
+The crypto policy entry a process used, as an algorithm and an operation.
+
+The identifier is the one exceptions name in `Algorithms` under
+`Machine\System\Cryptography\Exceptions`, such as `md5.hmac` or
+`sha1.digest`: an algorithm, a dot, then the operation it was used for.
+`/usr/share/peios-crypto/algorithms.tsv` lists every entry libpcrypto
+grades, with its grade and whether FIPS 140-3 approves it.
+
+--- field object.crypto-algorithm.grade
+type: str.enum
+values: U | D | C | B | A
+closed: true
+
+The entry's grade on Peios's ladder, from U, practically broken, to A.
+
+- `U`: practically broken, or forbidden by current standards, such as
+  MD5's collision resistance.
+- `D`: no practical break, but under 112-bit security or formally
+  deprecated.
+- `C`: 112-bit security.
+- `B`: 128-bit security.
+- `A`: 192-bit security or more.
+
+Absent for an entry on the floor, which nothing can use, so no record
+names one.
+
+--- field object.crypto-exception.name
+type: str
+
+A crypto policy exception, by its key's name, `Owner.Purpose`, such as
+`Radius.PacketAuth`.
+
+The exception is the key of that name under
+`Machine\System\Cryptography\Exceptions`.
+
+--- field object.crypto-policy.reject-below
+type: str.enum
+values: U | D | C | B | A
+closed: true
+
+The grade below which the published policy refuses an entry.
+
+At `U` only the floor is refused.
+
+--- field object.crypto-policy.warn-below
+type: str.enum
+values: U | D | C | B | A
+closed: true
+
+The grade below which the published policy allows an entry but records
+its use.
+
+--- field object.crypto-policy.reject-non-fips
+type: bool
+
+Whether the published policy refuses every entry FIPS 140-3 doesn't approve.
+
+The machine still doesn't operate in a FIPS-approved mode, because
+libpcrypto's module isn't validated.
+
+--- field object.crypto-policy.warn-non-fips
+type: bool
+
+Whether the published policy records the use of every entry FIPS 140-3
+doesn't approve.
+
+--- field object.crypto-policy.exceptions-may-reject
+type: bool
+
+Whether the published policy's exceptions may allow entries it would
+otherwise refuse.
+
+When false, an exception only stops an entry's use being warned about.
+
+--- field object.crypto-policy.exception-count
+type: uint
+
+The number of exceptions in the published policy.
+
+Exceptions cryptod dropped as invalid aren't counted.
+
+--- field object.crypto-policy.defaults
+type: bool
+
+Whether the published policy is Peios's defaults, because
+`Machine\System\Cryptography` doesn't exist.
+
+--- event cryptod.policy.applied
+tier: standard
+gating: every policy cryptod publishes
+
+cryptod compiled `Machine\System\Cryptography` and published the policy
+libpcrypto reads.
+
+cryptod compiles the key when it starts, and again whenever the key has
+been still for a moment after a change. A compile that gives the policy
+already published doesn't publish it again, and writes no record.
+
+A published policy applies to processes started from then on. A process
+reads the policy once, at its first use of libpcrypto, and keeps it, so a
+running service keeps the policy it started with until it is restarted.
+
+field: object.crypto-policy.reject-below           required
+field: object.crypto-policy.warn-below             required
+field: object.crypto-policy.reject-non-fips        required
+field: object.crypto-policy.warn-non-fips          required
+field: object.crypto-policy.exceptions-may-reject  required
+field: object.crypto-policy.exception-count        required
+field: object.crypto-policy.defaults               required
+field: subject.token.sid                    optional
+  cryptod's own user. Absent only if cryptod couldn't read its own token.
+
+--- event cryptod.policy.failed
+tier: essential
+gating: none: every failure is recorded
+
+A crypto policy couldn't be compiled, published or used as written.
+
+There are three kinds of failure:
+
+- **The compile failed.** A setting under `Machine\System\Cryptography`
+  is present but can't be read, the Registry couldn't be read, or the
+  policy is too large. cryptod keeps the policy it last published,
+  because falling back to the defaults could loosen a policy that an
+  administrator tightened. Fix the setting `outcome.detail` names.
+- **An exception was dropped.** It can't apply as written, so it allows
+  nothing, and the rest of the policy is published without it. Fix the
+  exception `object.crypto-exception.name` names. It's recorded when
+  first dropped, and when cryptod starts.
+- **A process couldn't use the policy.** It fell back to the next copy,
+  or to Peios's defaults, and reported why. `subject.process.pid` names
+  it.
+
+field: outcome.reason                       required
+  values: registry-unreadable | invalid-setting | too-large | invalid-exception-name | unknown-algorithm | floor-algorithm | no-algorithms | invalid-algorithms | invalid-program-security | write-failed | copy-unreadable | copy-insecure | copy-malformed | copy-version | token-unreadable
+  closed: false
+  What failed.
+
+  - `registry-unreadable`: cryptod couldn't read the key.
+  - `invalid-setting`: a value is present but has the wrong type or an
+    unknown grade.
+  - `too-large`: the policy, or one exception, doesn't fit the policy
+    file.
+  - `invalid-exception-name`: an exception's name isn't `Owner.Purpose`
+    in printable ASCII.
+  - `unknown-algorithm`: an exception names an entry libpcrypto doesn't
+    grade, often a typing mistake.
+  - `floor-algorithm`: an exception names an entry on the floor, which
+    nothing can allow.
+  - `no-algorithms`: an exception names no entries.
+  - `invalid-algorithms`: an exception's `Algorithms` isn't a
+    REG_MULTI_SZ.
+  - `invalid-program-security`: an exception's `ProgramSecurity` is
+    absent, isn't a security descriptor, or has no DACL.
+  - `write-failed`: cryptod couldn't write a copy of the policy.
+  - `copy-unreadable`: a process couldn't read a copy.
+  - `copy-insecure`: a process refused a copy that someone other than
+    SYSTEM or cryptod owns or could change.
+  - `copy-malformed`: a process refused a copy that isn't a policy.
+  - `copy-version`: a process refused a copy of a format version it
+    doesn't know, which an older libpcrypto does after an update.
+  - `token-unreadable`: a process couldn't read its own token, so it
+    used no exceptions.
+field: outcome.detail                       optional
+field: object.crypto-exception.name         optional
+  The exception dropped. Present when an exception, rather than the whole
+  policy, failed.
+field: subject.token.sid                    optional
+  For a process's report, the user of its token. Otherwise cryptod's own
+  user, absent only if cryptod couldn't read its own token.
+field: subject.process.pid                  optional
+  The process that reported it. Absent when cryptod failed.
+
+--- event cryptod.algorithm.warned
+tier: standard
+gating: once per process for each entry, at its first use
+
+A process used a crypto policy entry that the policy allows but warns
+about.
+
+libpcrypto reports the first use of each such entry in each process, and
+cryptod records it. A forked child reports again. An entry's use under
+an exception that doesn't warn is recorded as `cryptod.exception.used`
+instead.
+
+Before raising `Reject\MinimumGrade`, search these records to find the
+programs that would stop working. A refused low-level digest ends the
+program that asked for it.
+
+The process is named by the token and pid the kernel recorded when it
+connected to cryptod. A thread that was impersonating at that moment is
+recorded as the user it impersonated. The pid still names the process.
+
+field: object.crypto-algorithm.id           required
+field: object.crypto-algorithm.grade        required
+field: subject.token.sid                    required
+  The user of the process's token.
+field: subject.process.pid                  optional
+  The process. Absent if the kernel recorded none.
+
+--- event cryptod.exception.used
+tier: essential
+gating: once per process for each exception, at its first use
+
+A process used a crypto policy exception.
+
+libpcrypto reports each exception's first use in each process, whether
+the exception warns or not, and cryptod records it, so an audit can always
+find the weak crypto in use. A forked child reports again. The entry is
+the first one the process used under the exception.
+
+The process is named as in `cryptod.algorithm.warned`.
+
+field: object.crypto-exception.name         required
+field: object.crypto-algorithm.id           required
+field: object.crypto-algorithm.grade        required
+field: subject.token.sid                    required
+  The user of the process's token.
+field: subject.process.pid                  optional
+  The process. Absent if the kernel recorded none.

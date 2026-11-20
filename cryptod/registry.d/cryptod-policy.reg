@@ -1,0 +1,49 @@
+{
+  "_comment": [
+    "SeAuditPrivilege for cryptod, and for nothing else.",
+    "",
+    "cryptod writes KMES events for every process that uses libpcrypto:",
+    "cryptod.algorithm.warned and cryptod.exception.used, which most",
+    "processes can't write for themselves because they lack the privilege,",
+    "and cryptod.policy.applied and cryptod.policy.failed (cryptod.evman).",
+    "It lets the holder write events under its own kernel-stamped identity,",
+    "nothing more. cryptod deliberately lacks SeTcbPrivilege, so KMES limits",
+    "its rate as any process's; it queues records below that limit.",
+    "",
+    "SeChangeNotifyPrivilege beside it, because peinit removes every",
+    "privilege outside RequiredPrivileges and a process without it can't",
+    "traverse a directory to reach a file.",
+    "",
+    "authd unions the privileges of every SID on a token, and a service",
+    "token carries the S-1-5-80 service SID derived from the service name,",
+    "so a record named for that SID grants the privileges to this one",
+    "service.",
+    "",
+    "The SID below is SHA-1 of 'CRYPTOD' as upper-cased UTF-16LE, read as",
+    "five little-endian u32s, the derivation authd and peinit implement.",
+    "libpcrypto trusts a policy copy only if this SID or SYSTEM owns it",
+    "(runtime/machine.c), so renaming the service needs both changed.",
+    "",
+    "Separate from cryptod-service.reg, as timed's is: a privilege grant is",
+    "a different kind of statement from a service definition, and an image",
+    "may want to review it apart.",
+    "",
+    "Shipped into /usr/share/regim/; inert until an image names it in",
+    "[registry] autoapply."
+  ],
+  "keys": [
+    { "path": "Machine\\Generic" },
+    { "path": "Machine\\Generic\\Authn" },
+    { "path": "Machine\\Generic\\Authn\\Policy" },
+    {
+      "path": "Machine\\Generic\\Authn\\Policy\\S-1-5-80-2691053820-547492864-353945177-641201782-1210658655",
+      "values": [
+        {
+          "name": "Privileges",
+          "type": "multi",
+          "data": ["SeChangeNotifyPrivilege", "SeAuditPrivilege"]
+        }
+      ]
+    }
+  ]
+}

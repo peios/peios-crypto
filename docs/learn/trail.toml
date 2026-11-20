@@ -14,7 +14,10 @@ rules = [
 line_length = 78
 proper_nouns = [
   "Peios", "OpenSSL", "AWS-LC", "libpcrypto", "libpssl", "C", "C++", "Rust",
-  "Cargo", "TLS", "API", "SHA-256",
+  "Cargo", "TLS", "API", "SHA-256", "cryptod", "libpeios", "FIPS", "SID",
+  "SIDs", "SYSTEM", "Administrators", "Everyone", "RADIUS", "HMAC",
+  "HMAC-MD5", "HMAC-SHA-1", "MD5", "SHA-1", "RSA", "Diffie-Hellman", "RC2",
+  "KMES", "MessagePack", "CREATOR OWNER", "DACL", "SDDL", "ASCII",
 ]
 
 [lint.spelling]
