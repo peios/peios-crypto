@@ -9,6 +9,7 @@ import bin_path from "github.com/gcslib/buildenv"
 import "github.com/gcslib/rust"
 import PythonToolchain from "github.com/gcslib/python"
 import build * from "github.com/peios/peios-sdk"
+import "github.com/peios/peios-rs" as peios_rs
 
 let TOOL_CC = "/opt/cc"
 
@@ -443,3 +444,18 @@ fn checked(
     let ran = box.exec("/bin/sh", "-c", "set -e; mkdir -p /tmp; {script}")
     = {}
 }
+
+# cryptod's unit tests, as `cargo test -p cryptod` builds them, given
+# libpeios, which they load, and Clippy's checks, every warning denied.
+# What needs Peios, the Registry, peer tokens, KMES and files'
+# descriptors, is for the integration tests.
+def test cryptod_unit(
+    tests: List<rust.RustTest> = rust.tests(cryptod_crates(), "cryptod"),
+    given: List<{at: String, place: Dir | File}> = peios_rs.runtime(),
+) {
+    let each = for test in tests {
+        = rust.run_test(test, given = given, env = [{key = "LD_LIBRARY_PATH"; value = "/opt/peios/lib"}])
+    }
+}
+
+def test cryptod_clippy(checked: List<{}> = rust.clippy(cryptod_crates(), "cryptod", flags = ["-Dwarnings"])) {}

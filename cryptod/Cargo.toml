@@ -1,0 +1,26 @@
+[package]
+name = "cryptod"
+description = "The Peios crypto policy service: compiles the machine's policy and records what weak crypto is in use."
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.1"
+license = "MIT"
+publish = false
+
+[lib]
+name = "cryptod"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cryptod"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
+peios = { git = "https://github.com/peios/peios-rs.git", rev = "55fee6acb5ff23b97296d97ee966fa7c9f30a173", package = "peios" }
+
+[profile.release]
+# Packaging splits symbols after linking, as timed's does.
+debug = 2
+split-debuginfo = "off"
+incremental = false

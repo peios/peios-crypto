@@ -1,0 +1,27 @@
+# cryptod, the machine's crypto policy service, in `cryptod/`: a workspace
+# of its own, each crate compiled on its own (see the rust library's
+# `workspace`), for glibc. `peios-sys` binds libpeios with bindgen and links
+# it, so it, and every crate that depends on it, is given what peios-rs's
+# library says it needs: libpeios and its headers, built from the Peios
+# SDK's own files.
+#
+# cryptod reads what libpcrypto grades from the list the wrappers install,
+# `share/peios-crypto/algorithms.tsv`, and never links libpcrypto.
+import "github.com/gcslib/clang"
+import "github.com/gcslib/rust"
+import "github.com/peios/peios-rs" as peios_rs
+
+# The cryptod workspace, planned.
+def cryptod_crates() -> rust.RustWorkspace {
+    = rust.workspace(
+        dir("cryptod"),
+        rust.vendored(file("cryptod/Cargo.lock")),
+        crates = [...peios_rs.crate_settings()],
+        libclang = [clang.libclang_18()],
+    )
+}
+
+# The service.
+def build cryptod() {
+    = rust.bin(cryptod_crates(), "cryptod")
+}

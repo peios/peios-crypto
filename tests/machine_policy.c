@@ -251,6 +251,26 @@ int main(void) {
     check(run(errno_child, NULL, NULL, &r) && reported(&r, REPORT_WARNED, "md5.digest", NULL) == 1,
           "reading the policy and reporting a warning changed errno");
 
+    // The file cryptod writes, byte for byte as cryptod/src/policy.rs's
+    // test vector: reject below C, warn below B, exceptions may override
+    // rejection, and Radius.PacketAuth, which warns, for MD5's HMAC and
+    // digest. If one changes, so must the other.
+    static const uint8_t cryptod_vector[] = {
+        'P', 'E', 'I', 'O', 'S', 'C', 'P', 'L', 0, 1, 2, 3, EXCEPTIONS_MAY_REJECT, 0, 1,
+        17, 'R', 'a', 'd', 'i', 'u', 's', '.', 'P', 'a', 'c', 'k', 'e', 't', 'A', 'u', 't', 'h',
+        1, 0, 3, 1, 2, 3, 0, 2,
+        8, 'm', 'd', '5', '.', 'h', 'm', 'a', 'c',
+        10, 'm', 'd', '5', '.', 'd', 'i', 'g', 'e', 's', 't',
+    };
+    memcpy(f.data, cryptod_vector, sizeof(cryptod_vector));
+    f.len = sizeof(cryptod_vector);
+    write_policy(&f);
+    check(run(md5_allowed_child, "Radius.PacketAuth", NULL, &r) &&
+              reported(&r, REPORT_EXCEPTION, "md5.digest", "Radius.PacketAuth") == 1 &&
+              reported(&r, REPORT_WARNED, "md5.digest", NULL) == 1,
+          "cryptod's vector didn't except and warn about MD5 for Radius.PacketAuth");
+    check(run(md5_refused_child, NULL, NULL, &r), "cryptod's vector didn't reject MD5 below C");
+
     // Reject below C.
     header(&f, 1, GRADE_C, GRADE_B, EXCEPTIONS_MAY_REJECT, 0);
     write_policy(&f);
