@@ -135,7 +135,7 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
          ln -s libpcrypto.so.1 $D/lib/libcrypto.so; ln -s libpssl.so.1 $D/lib/libssl.so; \
          cp -R {REFERENCE}/include/openssl $D/include/; \
          cp {BINDINGS} $D/share/rust/aws_lc_bindings.rs; \
-         {pc("libcrypto", "The Peios OpenSSL-compatible cryptography library", "", "-lpcrypto")}; \
+         {pc("libcrypto", "The Peios OpenSSL-compatible cryptography library", "", "-lpcrypto", "-lpeios")}; \
          {pc("libssl", "The Peios OpenSSL-compatible TLS library", "Requires.private: libcrypto", "-lpssl")}; \
          {pc("openssl", "The Peios OpenSSL-compatible libraries", "Requires: libssl libcrypto", "")}",
         WRAPPERS,
@@ -156,12 +156,13 @@ def build wrappers(python: PythonToolchain = toolchain.get(Toolchain::Python)) {
 
 # The shell command that writes the pkg-config file `name`.pc, one line for
 # each of printf's arguments, into the installed tree at `$D`.
-fn pc(name: String, description: String, requires: String, libs: String) -> String {
+fn pc(name: String, description: String, requires: String, libs: String, private: String = "") -> String {
     let requires_line = if requires == "" { "" } else { "'{requires}'" }
     let libs_line = if libs == "" { "" } else { "'Libs: -L${{libdir}} {libs}'" }
+    let private_line = if private == "" { "" } else { "'Libs.private: {private}'" }
     = "printf '%s\\n' 'prefix=/usr' 'libdir=${{prefix}}/lib' 'includedir=${{prefix}}/include' '' \
        'Name: {name}' 'Description: {description}' 'Version: {OPENSSL_API}' \
-       {requires_line} {libs_line} 'Cflags: -I${{includedir}}' > $D/lib/pkgconfig/{name}.pc"
+       {requires_line} {libs_line} {private_line} 'Cflags: -I${{includedir}}' > $D/lib/pkgconfig/{name}.pc"
 }
 
 # Where a program that loads libpcrypto finds libpeios, which it needs.

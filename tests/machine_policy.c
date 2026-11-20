@@ -189,6 +189,16 @@ static int defaults_child(void) {
            digest_allowed(EVP_sha256()) == 1;
 }
 
+// Reading the policy and reporting a warning, in a process's first
+// decision, leave errno as it was, for a caller that reads it next.
+static int errno_child(void) {
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    errno = EAGAIN;
+    int ok = EVP_DigestInit_ex(ctx, EVP_md5(), NULL) && errno == EAGAIN;
+    EVP_MD_CTX_free(ctx);
+    return ok;
+}
+
 static int md5_refused_child(void) {
     return digest_allowed(EVP_md5()) == 0 && digest_allowed(EVP_sha256()) == 1;
 }
@@ -238,6 +248,8 @@ int main(void) {
     check(reported(&r, REPORT_WARNED, "md5.digest", NULL) == 1,
           "without a policy, MD5 wasn't warned about exactly once");
     check(reported(&r, REPORT_WARNED, "sha256.digest", NULL) == 0, "SHA-256 was warned about");
+    check(run(errno_child, NULL, NULL, &r) && reported(&r, REPORT_WARNED, "md5.digest", NULL) == 1,
+          "reading the policy and reporting a warning changed errno");
 
     // Reject below C.
     header(&f, 1, GRADE_C, GRADE_B, EXCEPTIONS_MAY_REJECT, 0);

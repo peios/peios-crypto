@@ -474,7 +474,7 @@ static void warned(const struct peios_algorithm *algorithm) {
     }
 }
 
-int peios_machine_allows(const struct peios_algorithm *algorithm) {
+static int allows(const struct peios_algorithm *algorithm) {
     pthread_once(&loaded, load);
     enum peios_decision decision = peios_policy_decision(algorithm, &machine.policy);
     if (decision == PEIOS_ALLOW) {
@@ -501,6 +501,16 @@ int peios_machine_allows(const struct peios_algorithm *algorithm) {
     }
     warned(algorithm);
     return 1;
+}
+
+int peios_machine_allows(const struct peios_algorithm *algorithm) {
+    /* A decision can come after the call it checks, as after SSL_read,
+       whose caller reads errno next: loading the policy and reporting
+       mustn't change it. */
+    int saved = errno;
+    int allowed = allows(algorithm);
+    errno = saved;
+    return allowed;
 }
 
 #ifdef PEIOS_TESTING
