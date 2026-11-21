@@ -25,3 +25,18 @@ def cryptod_crates() -> rust.RustWorkspace {
 def build cryptod() {
     = rust.bin(cryptod_crates(), "cryptod")
 }
+
+# What a package of cryptod ships beside the program: the pre-start hook
+# that makes its state directory, its registry seeds, the service and its
+# privileges, and its registry and event manuals.
+def cryptod_hook() -> File {
+    = file("cryptod/libexec/prepare-state")
+}
+
+def cryptod_registry() -> Dir {
+    = dir("cryptod/registry.d")
+}
+
+def cryptod_manuals() -> List<File> {
+    = [file("docs/cryptod.regman"), file("docs/cryptod.evman")]
+}
