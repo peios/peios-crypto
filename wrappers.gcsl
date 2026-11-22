@@ -48,15 +48,19 @@ let PEIOS = "/opt/peios"
 # API that the runtime wraps, so that a changed declaration fails the build.
 let AWSLC_SOURCE = "/opt/awslc-source"
 
-# How the generated hooks and the policy runtime are compiled.
-let OWN_CFLAGS = "-O2 -fPIC -fcf-protection=full -Wall -Wextra -Werror"
+# How the generated hooks and the policy runtime are compiled, with debug
+# information named as AWS-LC's is (awslc.gcsl).
+let OWN_CFLAGS = "-O2 -g -ffile-prefix-map=/work/=/usr/src/debug/peios-crypto/ -fPIC \
+                  -fcf-protection=full -Wall -Wextra -Werror"
 
 # The link both libraries share. Each binds its own calls to its own
 # functions, so that a program can't take over AWS-LC's internal calls by
 # defining a prefixed name libpcrypto exports. Data isn't bound: a program's
-# copy of an exported table is the one every library uses.
+# copy of an exported table is the one every library uses. Each has a build
+# ID, by which a debug package's symbols are found, whatever the compiler's
+# default.
 let LINK = "-shared -nostartfiles -Wl,-z,relro,-z,now,-z,noexecstack,-z,cet-report=error \
-            -Wl,--no-undefined -Wl,-Bsymbolic-functions"
+            -Wl,--no-undefined -Wl,-Bsymbolic-functions -Wl,--build-id=sha1"
 
 # The version AWS-LC's own pkg-config files give: the OpenSSL API it
 # provides.

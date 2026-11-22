@@ -42,14 +42,20 @@ let BINDGEN = "/opt/bindgen"
 
 let LIBCLANG = "/opt/libclang"
 
+# What every object is compiled with besides AWS-LC's own flags: Intel's
+# control-flow protection, and debug information, for the debug packages,
+# naming sources by where a debug package puts them rather than where the
+# build ran.
+let FLAGS = "-fcf-protection=full -g -ffile-prefix-map=/work/=/usr/src/debug/peios-crypto/"
+
 # The configuration every build shares: AWS-LC without Perl, which only
 # regenerates the assembly AWS-LC ships generated, and without rewriting
 # its own sources.
 let CONFIGURE = "-DCMAKE_BUILD_TYPE=Release -DDISABLE_PERL=ON -DENABLE_SOURCE_MODIFICATION=OFF \
                  -DCMAKE_C_COMPILER=\"$CC\" -DCMAKE_CXX_COMPILER=\"$CXX\" \
                  -DCMAKE_AR=\"$AR\" -DCMAKE_RANLIB=\"$RANLIB\" \
-                 -DCMAKE_C_FLAGS=-fcf-protection=full -DCMAKE_CXX_FLAGS=-fcf-protection=full \
-                 -DCMAKE_ASM_FLAGS=-fcf-protection=full"
+                 -DCMAKE_C_FLAGS=\"{FLAGS}\" -DCMAKE_CXX_FLAGS=\"{FLAGS}\" \
+                 -DCMAKE_ASM_FLAGS=\"{FLAGS}\""
 
 # The libraries alone, without AWS-LC's tests or its `bssl` tool.
 let LIBRARIES = "-DBUILD_TESTING=OFF -DBUILD_TOOL=OFF"
