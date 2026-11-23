@@ -17,6 +17,8 @@ pub mod posture;
 pub mod registry;
 pub mod report;
 
+use std::time::Duration;
+
 use peios::security::{SdView, sddl};
 
 /// cryptod's service SID: S-1-5-80 and the SHA-1 of "CRYPTOD" in UTF-16LE,
@@ -58,6 +60,15 @@ pub fn posture_sddl() -> String {
     format!("D:P(A;;FA;;;SY)(A;;FA;;;{SID})(A;;0x12019f;;;BA)")
 }
 
+/// How long to wait before compiling again after a failure that may pass,
+/// the Registry not answering yet say: a second at first, then twice the
+/// last wait, at most a minute.
+pub fn retry_after(previous: Option<Duration>) -> Duration {
+    const FIRST: Duration = Duration::from_secs(1);
+    const MOST: Duration = Duration::from_secs(60);
+    previous.map_or(FIRST, |d| (d * 2).min(MOST))
+}
+
 /// Checks an exception's `ProgramSecurity`: it must be a self-relative SD
 /// with an owner, as an access check refuses a descriptor without one, so
 /// no program could use the exception; and with a DACL, as a NULL or
@@ -96,6 +107,18 @@ mod tests {
         assert!(check_program_security(&ownerless).is_err(), "an access check refuses it");
         assert!(check_program_security(b"junk").is_err());
         assert!(parse_sddl("D:(A;;").is_err());
+    }
+
+    #[test]
+    fn retries_back_off_from_a_second_to_a_minute() {
+        let mut wait = None;
+        let mut waits = Vec::new();
+        for _ in 0..9 {
+            let next = retry_after(wait);
+            waits.push(next.as_secs());
+            wait = Some(next);
+        }
+        assert_eq!(waits, [1, 2, 4, 8, 16, 32, 60, 60, 60]);
     }
 
     #[test]

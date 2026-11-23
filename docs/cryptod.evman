@@ -139,7 +139,10 @@ field: outcome.reason                       required
   closed: false
   What failed.
 
-  - `registry-unreadable`: cryptod couldn't read the key.
+  - `registry-unreadable`: cryptod couldn't read the key, as when it
+    starts while the boot is still applying registry seeds. It tries
+    again, after a second and then twice as long each time, at most a
+    minute, and records the failure once until it passes.
   - `invalid-setting`: a value is present but has the wrong type or an
     unknown grade.
   - `too-large`: the policy, or one exception, doesn't fit the policy

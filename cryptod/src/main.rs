@@ -115,6 +115,8 @@ fn main() {
         },
         published: None,
         last_failure: None,
+        retry: None,
+        retry_wait: None,
         posture: Posture::default(),
         watch: None,
         watch_retry: Instant::now(),
@@ -157,6 +159,10 @@ struct Service {
     /// The bytes last published, so an unchanged policy isn't again.
     published: Option<Vec<u8>>,
     last_failure: Option<(String, String)>,
+    /// When to compile again after a failure that may pass, and how long
+    /// the last wait was.
+    retry: Option<Instant>,
+    retry_wait: Option<Duration>,
     posture: Posture,
     watch: Option<Key>,
     watch_retry: Instant,
@@ -253,7 +259,31 @@ impl Service {
         );
     }
 
+    /// Records a failure, unless it's the one already recorded: a failure
+    /// retried until it passes is recorded once.
+    fn failed_once(&mut self, reason: &str, detail: String) {
+        let again = self.last_failure.as_ref().is_some_and(|(r, d)| r == reason && *d == detail);
+        if !again {
+            self.failed(reason, &detail, None);
+        }
+        self.last_failure = Some((reason.into(), detail));
+    }
+
+    /// Compiles again later, waiting longer each time it fails.
+    fn retry_later(&mut self) {
+        let wait = cryptod::retry_after(self.retry_wait);
+        self.retry_wait = Some(wait);
+        self.retry = Some(Instant::now() + wait);
+    }
+
     /// Compiles the key and publishes it, if it changed or `always`.
+    ///
+    /// The Registry can be unreadable for a moment, as when cryptod starts
+    /// while the boot is still applying registry seeds, and a copy can fail
+    /// to write: either is tried again, waiting longer each time, until it
+    /// passes. Otherwise the first boot would have no policy published at
+    /// all. A setting that can't be read isn't tried again: it waits for
+    /// the key to change.
     fn compile(&mut self, always: bool) {
         let compiled = Registry::open()
             .map_err(compile::Failure::Unreadable)
@@ -263,12 +293,26 @@ impl Service {
         let compiled = match compiled {
             Ok(c) => c,
             Err(failure) => {
-                let detail = format!("{failure}; the policy already published is kept");
-                self.failed(failure.reason(), &detail, None);
-                self.last_failure = Some((failure.reason().into(), detail));
+                let kept = if self.published.is_some() {
+                    "the policy already published is kept"
+                } else {
+                    "nothing is published yet, so processes use the copy kept across reboots, or Peios's defaults"
+                };
+                let transient = matches!(failure, compile::Failure::Unreadable(_));
+                let detail = if transient {
+                    format!("{failure}; {kept}; trying again")
+                } else {
+                    format!("{failure}; {kept}")
+                };
+                self.failed_once(failure.reason(), detail);
+                if transient {
+                    self.retry_later();
+                }
                 return;
             }
         };
+        self.retry = None;
+        self.retry_wait = None;
         // What's dropped, and a failure resolved, are recorded whether or
         // not the bytes changed: an exception broken on its own changes
         // nothing published. Each is recorded once, when it's first
@@ -287,14 +331,18 @@ impl Service {
             return;
         }
         let mut current = false;
+        let mut failures = Vec::new();
         for path in [cryptod::CURRENT, cryptod::LAST_KNOWN] {
             match write_copy(Path::new(path), &bytes) {
                 Ok(()) => current |= path == cryptod::CURRENT,
-                Err(e) => self.failed("write-failed", &format!("writing {path}: {e}"), None),
+                Err(e) => failures.push(format!("writing {path}: {e}")),
             }
         }
+        if !failures.is_empty() {
+            self.failed_once("write-failed", format!("{}; trying again", failures.join("; ")));
+        }
         if !current {
-            self.last_failure = Some(("write-failed".into(), format!("{} wasn't written", cryptod::CURRENT)));
+            self.retry_later();
             return;
         }
         log::info(format_args!(
@@ -306,7 +354,11 @@ impl Service {
         self.emit(events::POLICY_APPLIED, Tier::Standard, events::policy_applied(&compiled, self.own.as_ref()));
         self.published = Some(bytes);
         self.compiled = compiled;
-        self.last_failure = None;
+        // A copy kept across reboots that couldn't be written stays the
+        // posture's last failure.
+        if failures.is_empty() {
+            self.last_failure = None;
+        }
     }
 
     /// Arms the watch, on the key or, while it doesn't exist, its parent.
@@ -333,6 +385,9 @@ impl Service {
         }
         if self.backlog.front().is_some() {
             let d = self.rate.next(now);
+            deadline = Some(deadline.map_or(d, |x| x.min(d)));
+        }
+        if let Some(d) = self.retry {
             deadline = Some(deadline.map_or(d, |x| x.min(d)));
         }
         let timeout = deadline.map_or(-1, |d| {
@@ -386,6 +441,11 @@ impl Service {
             self.arm();
             // What changed while unwatched.
             self.compile(false);
+        }
+        if self.retry.is_some_and(|d| d <= now) {
+            self.retry = None;
+            let first = self.published.is_none();
+            self.compile(first);
         }
     }
 
